@@ -5,8 +5,9 @@
     {
       "step": 0,
       "name": "source-domain-contracts",
-      "status": "pending",
-      "started_at": "2026-09-04T09:59:15+0900"
+      "status": "completed",
+      "started_at": "2026-09-04T09:59:15+0900",
+      "summary": "Zod 기반 source 요청·장·목차 계약과 스키마 추론 타입, 안전한 공개 오류 매핑을 구현하고 계약 테스트를 추가했다."
     },
     {
       "step": 1,
