@@ -329,7 +329,7 @@ export function createReaderSessionController(
       chapter = parsed.data;
     } catch (error) {
       if (!isCurrent(operation)) return;
-      if (isAbortError(error) || activeController.signal.aborted) dispatch({ type: "cancel" });
+      if (isAbortError(error) || activeController?.signal.aborted) dispatch({ type: "cancel" });
       else dispatch({ type: "fail", error: safeError(error, "source") });
       activeController = undefined;
       return;

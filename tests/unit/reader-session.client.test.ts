@@ -9,7 +9,7 @@ import type {
   CachedChapterTranslationResult,
   PreparedCachedChapterTranslation,
 } from "../../src/lib/translation/cached-pipeline.client";
-import type { SourceCache } from "../../src/services/source-cache.client";
+import type { SourceCache, SourceCachePutResult } from "../../src/services/source-cache.client";
 import type { ChapterSource } from "../../src/types/source";
 import type { TranslationProgress } from "../../src/types/translation";
 
@@ -57,6 +57,8 @@ const result = (
   persistence: { status: "not_attempted" },
 });
 
+const unavailableSourceCachePut = async (): Promise<SourceCachePutResult> => ({ status: "unavailable" });
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -86,7 +88,7 @@ function setup(
   };
   const sourceCache = overrides.sourceCache ?? {
     get: vi.fn(async () => ({ status: "miss" as const })),
-    put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+    put: vi.fn(unavailableSourceCachePut),
   };
   const preparePipeline = vi.fn(overrides.preparePipeline ?? (async () => ({
     cacheKey: "cache-key",
@@ -207,7 +209,7 @@ describe("reader session controller", () => {
       sourceClient,
       sourceCache: {
         get: async () => ({ status: "miss" }),
-        put: async () => ({ status: "stored", record: {} }),
+        put: unavailableSourceCachePut,
       },
       networkAvailable: () => true,
       preparePipeline: async () => ({
@@ -305,7 +307,7 @@ describe("reader session controller", () => {
     ]);
     const sourceCache = {
       get: vi.fn(async () => ({ status: "miss" as const })),
-      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+      put: vi.fn(unavailableSourceCachePut),
     };
     const { controller } = setup(async () => result(complete), { sourceCache });
 
@@ -324,7 +326,7 @@ describe("reader session controller", () => {
     ]);
     const sourceCache = {
       get: vi.fn(async () => ({ status: "hit" as const, chapter: cachedChapter })),
-      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+      put: vi.fn(unavailableSourceCachePut),
     };
     const execute = vi.fn();
     const getCached = vi.fn(async () => result(complete, "hit"));
@@ -357,7 +359,7 @@ describe("reader session controller", () => {
     const execute = vi.fn();
     const sourceCache = {
       get: vi.fn(async () => sourceLookup),
-      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+      put: vi.fn(unavailableSourceCachePut),
     };
     const getCached = vi.fn(async () => cachedTranslation);
     const { controller, sourceClient } = setup(execute, {
@@ -389,7 +391,7 @@ describe("reader session controller", () => {
     let online = true;
     const sourceCache = {
       get: vi.fn(async () => ({ status: "hit" as const, chapter: chapter("1") })),
-      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+      put: vi.fn(unavailableSourceCachePut),
     };
     const { controller, sourceClient } = setup(async () => result(complete), {
       sourceCache,
