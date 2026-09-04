@@ -26,6 +26,7 @@ function chapter(url: string, number: number) {
 async function mockBoundaries(page: Page) {
   const geminiRequests: string[] = [];
   const serverRequests: string[] = [];
+  const blockedTranslationIds: string[][] = [];
   let translationMode: "success" | "blocked-once" | "delayed" = "success";
   await page.route("**/api/source/chapter", async (route) => {
     const body = route.request().postData() ?? "";
@@ -53,6 +54,7 @@ async function mockBoundaries(page: Page) {
     if (translationMode === "delayed") await new Promise((resolve) => setTimeout(resolve, 800));
     if (translationMode === "blocked-once") {
       translationMode = "success";
+      blockedTranslationIds.push((JSON.parse(text) as { paragraphs: Array<{ id: string }> }).paragraphs.map(({ id }) => id));
       await route.fulfill({ json: { promptFeedback: { blockReason: "SAFETY" } } });
       return;
     }
@@ -60,7 +62,25 @@ async function mockBoundaries(page: Page) {
     const translations = parsed.paragraphs.map(({ id }) => ({ id, text: `${id} 한국어 번역` }));
     await route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify({ translations }) }] } }] } });
   });
-  return { geminiRequests, serverRequests, setTranslationMode(mode: typeof translationMode) { translationMode = mode; } };
+  return {
+    geminiRequests,
+    serverRequests,
+    blockedTranslationIds,
+    setTranslationMode(mode: typeof translationMode) { translationMode = mode; },
+  };
+}
+
+function translationRequestIds(requests: readonly string[]): string[][] {
+  return requests.flatMap((request) => {
+    try {
+      const body = JSON.parse(request) as { contents?: Array<{ parts?: Array<{ text?: string }> }> };
+      const text = body.contents?.[0]?.parts?.[0]?.text;
+      if (!text || text === "Reply with ok.") return [];
+      return [(JSON.parse(text) as { paragraphs: Array<{ id: string }> }).paragraphs.map(({ id }) => id)];
+    } catch {
+      return [];
+    }
+  });
 }
 
 async function saveKeyAndOpen(page: Page) {
@@ -143,8 +163,29 @@ test("취소와 부분 실패 재시도가 성공한 문단을 버리지 않는�
   await expect(page.getByText("p-1 한국어 번역")).toBeVisible();
 });
 
-test("production Service Worker에서 cached 장은 offline 재사용하고 신규 장은 OFFLINE을 안내한다", async ({ page, context }) => {
-  await mockBoundaries(page);
+test("부분 실패 재시도는 실패한 chunk만 Gemini에 다시 보낸다", async ({ page }) => {
+  const boundaries = await mockBoundaries(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "설정 열기" }).click();
+  await page.getByLabel("Gemini API Key").fill(API_KEY);
+  await page.getByRole("button", { name: "변경사항 저장" }).click();
+  await page.getByRole("button", { name: "설정 닫기" }).click();
+
+  boundaries.setTranslationMode("blocked-once");
+  await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
+  await page.getByRole("button", { name: "번역해서 읽기" }).click();
+  await expect(page.locator(".translation-failure")).toContainText("번역하지 못한 문단");
+  const beforeRetry = translationRequestIds(boundaries.geminiRequests);
+  expect(boundaries.blockedTranslationIds).toHaveLength(1);
+
+  await page.getByRole("button", { name: "실패한 문단 다시 번역" }).click();
+  await expect(page.getByText("완료", { exact: true })).toBeVisible();
+  const retryRequests = translationRequestIds(boundaries.geminiRequests).slice(beforeRetry.length);
+  expect(retryRequests).toEqual(boundaries.blockedTranslationIds);
+});
+
+test("production Service Worker에서 cached 장은 실제 offline reload로 복원하고 신규 장은 OFFLINE을 안내한다", async ({ page, context }) => {
+  const boundaries = await mockBoundaries(page);
   await saveKeyAndOpen(page);
   const serviceWorkerReady = await page.evaluate(async () => {
     if (!("serviceWorker" in navigator)) return false;
@@ -152,12 +193,31 @@ test("production Service Worker에서 cached 장은 offline 재사용하고 신�
     return true;
   });
   expect(serviceWorkerReady).toBe(true);
+
+  await page.unroute("**/api/source/chapter");
+  await page.unroute("**/api/source/catalog");
+  await page.unroute("https://generativelanguage.googleapis.com/**");
+  const offlineBoundaryRequests: string[] = [];
+  const trackBoundaryRequest = (request: { url(): string }) => {
+    if (request.url().includes("/api/source/") || request.url().startsWith("https://generativelanguage.googleapis.com/")) {
+      offlineBoundaryRequests.push(request.url());
+    }
+  };
+  context.on("request", trackBoundaryRequest);
   await context.setOffline(true);
-  await page.reload();
-  await expect(page.getByText("p-1 한국어 번역")).toBeVisible();
   await page.addInitScript(() => Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false }));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "제1화 산문" })).toBeVisible();
+  await expect(page.getByText("p-1 한국어 번역")).toBeVisible();
+  await page.getByRole("button", { name: "원문", exact: true }).click();
+  await expect(page.getByText(/^第1章 第一段原文。/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "이전 장 없음" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "목차 열기", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "다음 장: 제2화" }).first()).toBeEnabled();
   await page.goto(`/read?url=${encodeURIComponent(CHAPTER_TWO)}`);
   await expect(page.getByText("새 콘텐츠를 열려면 네트워크 연결이 필요합니다.")).toBeVisible();
+  expect(offlineBoundaryRequests).toEqual([]);
+  expect(boundaries.serverRequests).toHaveLength(1);
 });
 
 test("키보드로 보기 모드와 dialog를 조작하고 닫은 뒤 focus를 복원한다", async ({ page }) => {

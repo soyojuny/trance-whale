@@ -61,8 +61,9 @@
     {
       "step": 7,
       "name": "offline-e2e-validation",
-      "status": "pending",
-      "started_at": "2026-09-04T23:09:40+0900"
+      "status": "blocked",
+      "started_at": "2026-09-04T23:09:40+0900",
+      "blocked_reason": "Playwright Chromium cannot launch because the environment is missing libnspr4.so; E2E assertions were not skipped or relaxed."
     }
   ],
   "created_at": "2026-09-04T22:13:14+0900"
