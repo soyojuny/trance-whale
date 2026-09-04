@@ -45,6 +45,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("source client", () => {
+  it("reports OFFLINE without starting a new source request", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const client = createSourceClient(fetchImpl, () => false);
+
+    const error = await client.fetchChapter(SOURCE_URL, new AbortController().signal)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "OFFLINE", retryable: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["chapter", "/api/source/chapter", SOURCE_URL, chapter],
     ["catalog", "/api/source/catalog", catalog.sourceUrl, catalog],

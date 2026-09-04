@@ -3,8 +3,9 @@ import "client-only";
 import type { PublicError } from "../lib/errors";
 import { createPreferencesService, type StorageResult } from "./preferences.client";
 import { READER_DB_SCHEMA } from "./reader-db.client";
+import { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/config";
 
-export const APP_CACHE_STORAGE_PREFIX = "trance-whale-app-shell:";
+export { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/config";
 
 type PreferencesReset = {
   clearPreferences(): StorageResult;

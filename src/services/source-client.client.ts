@@ -37,7 +37,7 @@ export class SourceClientError extends SourceContractError {
   }
 }
 
-function sourceError(code: Extract<PublicErrorCode, "INVALID_URL" | "SOURCE_UNREACHABLE" | "EXTRACTION_FAILED">) {
+function sourceError(code: Extract<PublicErrorCode, "INVALID_URL" | "SOURCE_UNREACHABLE" | "EXTRACTION_FAILED" | "OFFLINE">) {
   const error = toPublicError(new SourceContractError(code));
   return new SourceClientError(error.code, error.retryable, error.message);
 }
@@ -54,7 +54,10 @@ async function decodeJson(response: Response): Promise<unknown> {
   }
 }
 
-export function createSourceClient(fetchImpl: FetchImplementation = fetch): SourceClient {
+export function createSourceClient(
+  fetchImpl: FetchImplementation = fetch,
+  networkAvailable = () => typeof navigator === "undefined" || navigator.onLine,
+): SourceClient {
   async function request<T>(
     path: "/api/source/chapter" | "/api/source/catalog",
     url: string,
@@ -63,6 +66,7 @@ export function createSourceClient(fetchImpl: FetchImplementation = fetch): Sour
   ): Promise<T> {
     const requestBody = SourceRequestSchema.safeParse({ url });
     if (!requestBody.success) throw sourceError("INVALID_URL");
+    if (!networkAvailable()) throw sourceError("OFFLINE");
 
     let response: Response;
     try {

@@ -17,6 +17,7 @@ type CommonRequest = {
   modelId: string;
   signal: AbortSignal;
   fetchImpl?: FetchImplementation;
+  networkAvailable?: () => boolean;
 };
 
 type TranslateChunkRequest = CommonRequest & {
@@ -40,6 +41,7 @@ const ERROR_MESSAGES: Record<
     | "QUOTA_EXCEEDED"
     | "TRANSLATION_BLOCKED"
     | "TRANSLATION_FAILED"
+    | "OFFLINE"
   >,
   string
 > = {
@@ -48,6 +50,7 @@ const ERROR_MESSAGES: Record<
   QUOTA_EXCEEDED: "Gemini API 할당량이 소진되었습니다.",
   TRANSLATION_BLOCKED: "안전 정책으로 번역할 수 없습니다.",
   TRANSLATION_FAILED: "번역을 완료할 수 없습니다.",
+  OFFLINE: "새 콘텐츠를 열려면 네트워크 연결이 필요합니다.",
 };
 
 export class GeminiClientError extends SourceContractError {
@@ -92,6 +95,9 @@ async function sendGenerateContent(
   body: Record<string, unknown>,
 ): Promise<SafeGeminiResponse> {
   assertAllowedModel(request.modelId);
+  const networkAvailable = request.networkAvailable
+    ?? (() => typeof navigator === "undefined" || navigator.onLine);
+  if (!networkAvailable()) throw new GeminiClientError("OFFLINE", true);
   const fetchImpl = request.fetchImpl ?? fetch;
   let response: Response;
 

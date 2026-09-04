@@ -19,6 +19,20 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("Gemini client", () => {
+  it("reports OFFLINE without starting a new translation request", async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const error = await validateApiKey({
+      apiKey: API_KEY,
+      modelId,
+      signal: new AbortController().signal,
+      fetchImpl,
+      networkAvailable: () => false,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: "OFFLINE", retryable: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("validates an API key directly with Gemini using the selected model and signal", async () => {
     const signal = new AbortController().signal;
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
