@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-09-04T22:45:49+0900",
       "summary": "Reader sessions cache validated online chapters and restore complete source and translation caches offline without source or Gemini requests.",
-      "completed_at": "2026-09-04T22:47:00+0900"
+      "completed_at": "2026-09-04T22:47:34+0900"
     },
     {
       "step": 2,
