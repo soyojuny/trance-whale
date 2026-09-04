@@ -126,12 +126,13 @@ describe("ReaderView", () => {
     if (state.status !== "partial_failure") throw new Error("partial failure state expected");
     state.errors = [{
       code: "TRANSLATION_BLOCKED",
-      message: "안전 정책으로 번역할 수 없습니다.",
+      message: `${secret} raw upstream body`,
       retryable: false,
     }];
     render(<ReaderView state={state} settings={settings} />);
 
     expect(screen.getByRole("alert")).toHaveTextContent("다시 번역할 수 없는 실패가 있습니다.");
+    expect(screen.getByRole("alert")).toHaveTextContent("안전 정책으로 번역할 수 없습니다.");
     expect(screen.queryByRole("button", { name: "실패한 문단 다시 번역" })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain(secret);
     expect(document.body.textContent).not.toContain("raw upstream body");

@@ -2,6 +2,7 @@
 
 import type { RefObject } from "react";
 
+import { publicErrorForCode } from "../../lib/errors";
 import type { ReaderSessionState } from "../../lib/reader/session.client";
 import type { NavigationTarget } from "../../types/source";
 import type { ReaderSettings, ViewMode } from "../../types/storage";
@@ -79,6 +80,10 @@ export default function ReaderView({
   const isTranslating = state.status === "translating";
   const isPartialFailure = state.status === "partial_failure";
   const isRetryingFailedChunks = isTranslating && state.retryingFailedChunks;
+  const partialErrors = isPartialFailure ? state.errors : state.retryingErrors ?? [];
+  const failureErrors = Array.from(
+    new Map(partialErrors.map((error) => [error.code, publicErrorForCode(error.code)])).values(),
+  );
   const fontSize = Math.min(24, Math.max(16, settings.fontSize));
 
   return (
@@ -113,8 +118,8 @@ export default function ReaderView({
         {isPartialFailure && (
           <div className="translation-failure" role="alert">
             <span>번역하지 못한 문단이 {state.totalParagraphs - state.completedParagraphs}개 있습니다.</span>
-            {state.errors.map((error) => <p key={error.code}>{error.message}</p>)}
-            {state.errors.some((error) => error.retryable)
+            {failureErrors.map((error) => <p key={error.code}>{error.message}</p>)}
+            {failureErrors.some((error) => error.retryable)
               ? <button type="button" aria-label="실패한 문단 다시 번역" onClick={onRetryFailed}>다시 번역</button>
               : <span>다시 번역할 수 없는 실패가 있습니다.</span>}
           </div>
@@ -123,7 +128,7 @@ export default function ReaderView({
         {isRetryingFailedChunks && (
           <div className="translation-failure" role="status">
             <span>실패한 문단을 다시 번역하는 중입니다.</span>
-            {state.retryingErrors?.map((error) => <p key={error.code}>{error.message}</p>)}
+            {failureErrors.map((error) => <p key={error.code}>{error.message}</p>)}
           </div>
         )}
 
