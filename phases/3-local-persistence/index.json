@@ -31,7 +31,7 @@
       "name": "translation-cache",
       "status": "completed",
       "started_at": "2026-09-04T15:07:15+0900",
-      "completed_at": "2026-09-04T15:10:09+0900",
+      "completed_at": "2026-09-04T15:10:43+0900",
       "summary": "완전한 장 번역만 저장하고 UTF-8 크기 산정, LRU 용량 정리와 quota 단일 재시도를 제공하는 번역 캐시 서비스를 구현했다."
     },
     {
