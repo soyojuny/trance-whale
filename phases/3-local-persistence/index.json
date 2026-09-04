@@ -47,7 +47,7 @@
       "name": "local-data-reset",
       "status": "completed",
       "started_at": "2026-09-04T15:13:40+0900",
-      "completed_at": "2026-09-04T15:16:19+0900",
+      "completed_at": "2026-09-04T15:17:08+0900",
       "summary": "앱 소유 localStorage, Reader DB와 Cache Storage를 독립적으로 삭제하고 영역별 안전한 결과를 반환하는 통합 초기화 유스케이스를 구현했다."
     },
     {
