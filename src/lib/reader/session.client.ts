@@ -1,13 +1,19 @@
 import "client-only";
 
-import { PublicErrorSchema, type PublicError } from "../errors";
+import {
+  PublicErrorSchema,
+  SourceContractError,
+  toPublicError,
+  type PublicError,
+} from "../errors";
 import {
   type CachedChapterTranslationResult,
   type PreparedCachedChapterTranslation,
 } from "../translation/cached-pipeline.client";
 import type { SourceClient } from "../../services/source-client.client";
+import type { SourceCache } from "../../services/source-cache.client";
 import type { Preferences } from "../../services/preferences.client";
-import type { ChapterSource } from "../../types/source";
+import { ChapterSourceSchema, SourceRequestSchema, type ChapterSource } from "../../types/source";
 import type { TranslationParagraph, TranslationProgress } from "../../types/translation";
 
 type SessionContent = {
@@ -140,6 +146,8 @@ type PreparePipeline = (request: {
 
 type ReaderSessionDependencies = {
   sourceClient: SourceClient;
+  sourceCache: Pick<SourceCache, "get" | "put">;
+  networkAvailable: () => boolean;
   preparePipeline: PreparePipeline;
   loadTranslationSettings: () => Preferences["translation"];
   onStateChange?: (state: ReaderSessionState) => void;
@@ -168,6 +176,19 @@ function safeError(error: unknown, boundary: "source" | "translation"): PublicEr
   return boundary === "source"
     ? { code: "SOURCE_UNREACHABLE", message: "원본 사이트에 연결할 수 없습니다.", retryable: true }
     : { code: "TRANSLATION_FAILED", message: "번역을 완료할 수 없습니다.", retryable: true };
+}
+
+function normalizeChapterUrl(input: string): string | undefined {
+  const parsed = SourceRequestSchema.safeParse({ url: input });
+  if (!parsed.success) return undefined;
+
+  const url = new URL(parsed.data.url);
+  url.hash = "";
+  return url.href;
+}
+
+function offlineError(): PublicError {
+  return toPublicError(new SourceContractError("OFFLINE"));
 }
 
 export function createReaderSessionController(
@@ -228,7 +249,7 @@ export function createReaderSessionController(
     }
   };
 
-  const openChapter = async (url: string): Promise<void> => {
+  const openChapter = async (url: string, forceReload = false): Promise<void> => {
     activeController?.abort();
     const operation = ++generation;
     activeController = new AbortController();
@@ -237,9 +258,75 @@ export function createReaderSessionController(
     prepared = undefined;
     dispatch({ type: "fetch_source", url });
 
+    if (!dependencies.networkAvailable()) {
+      if (forceReload) {
+        dispatch({ type: "fail", error: offlineError() });
+        activeController = undefined;
+        return;
+      }
+
+      const normalizedUrl = normalizeChapterUrl(url);
+      if (!normalizedUrl) {
+        dispatch({ type: "fail", error: toPublicError(new SourceContractError("INVALID_URL")) });
+        activeController = undefined;
+        return;
+      }
+
+      let cachedChapter: ChapterSource | undefined;
+      try {
+        const cached = await dependencies.sourceCache.get(normalizedUrl);
+        if (cached.status === "hit") {
+          const parsed = ChapterSourceSchema.safeParse(cached.chapter);
+          if (parsed.success) cachedChapter = parsed.data;
+        }
+      } catch {
+        // Source cache availability must not leak storage errors into public state.
+      }
+      if (!isCurrent(operation)) return;
+      if (!cachedChapter) {
+        dispatch({ type: "fail", error: offlineError() });
+        activeController = undefined;
+        return;
+      }
+
+      currentChapter = cachedChapter;
+      dispatch({ type: "source_received", chapter: cachedChapter });
+      dispatch({ type: "check_cache" });
+      const settings = dependencies.loadTranslationSettings();
+      try {
+        prepared = await dependencies.preparePipeline({
+          chapter: cachedChapter,
+          mode: settings.translationMode,
+          userPrompt: settings.userPrompt,
+        });
+        const cachedTranslation = await prepared.getCached();
+        if (!isCurrent(operation)) return;
+        if (!cachedTranslation) {
+          dispatch({ type: "fail", error: offlineError() });
+          activeController = undefined;
+          return;
+        }
+        dispatch({ type: "translation_finished", result: cachedTranslation });
+        activeController = undefined;
+      } catch {
+        if (isCurrent(operation)) {
+          dispatch({ type: "fail", error: offlineError() });
+          activeController = undefined;
+        }
+      }
+      return;
+    }
+
     let chapter: ChapterSource;
     try {
-      chapter = await dependencies.sourceClient.fetchChapter(url, activeController.signal);
+      const fetched = await dependencies.sourceClient.fetchChapter(url, activeController.signal);
+      const parsed = ChapterSourceSchema.safeParse(fetched);
+      if (!parsed.success) {
+        dispatch({ type: "fail", error: toPublicError(new SourceContractError("EXTRACTION_FAILED")) });
+        activeController = undefined;
+        return;
+      }
+      chapter = parsed.data;
     } catch (error) {
       if (!isCurrent(operation)) return;
       if (isAbortError(error) || activeController.signal.aborted) dispatch({ type: "cancel" });
@@ -251,6 +338,7 @@ export function createReaderSessionController(
 
     currentChapter = chapter;
     dispatch({ type: "source_received", chapter });
+    void dependencies.sourceCache.put(chapter).catch(() => undefined);
     dispatch({ type: "check_cache" });
     const settings = dependencies.loadTranslationSettings();
     try {
@@ -305,7 +393,7 @@ export function createReaderSessionController(
       dispatch({ type: "cancel" });
     },
     forceReload: async () => {
-      if (currentUrl) await openChapter(currentUrl);
+      if (currentUrl) await openChapter(currentUrl, true);
     },
     forceRetranslate: () => rerunTranslation(true),
     retryFailedTranslation: async () => {

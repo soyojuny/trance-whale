@@ -9,6 +9,7 @@ import type {
   CachedChapterTranslationResult,
   PreparedCachedChapterTranslation,
 } from "../../src/lib/translation/cached-pipeline.client";
+import type { SourceCache } from "../../src/services/source-cache.client";
 import type { ChapterSource } from "../../src/types/source";
 import type { TranslationProgress } from "../../src/types/translation";
 
@@ -66,15 +67,36 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup(execute: PreparedCachedChapterTranslation["execute"]) {
+function setup(
+  execute: PreparedCachedChapterTranslation["execute"],
+  overrides: {
+    sourceCache?: Pick<SourceCache, "get" | "put">;
+    networkAvailable?: () => boolean;
+    preparePipeline?: (request: {
+      chapter: ChapterSource;
+      mode: "fast" | "quality";
+      userPrompt: string;
+    }) => Promise<PreparedCachedChapterTranslation>;
+  } = {},
+) {
   const states: ReaderSessionState[] = [];
   const sourceClient = {
     fetchChapter: vi.fn(async (url: string) => chapter(url.endsWith("2") ? "2" : "1")),
     fetchCatalog: vi.fn(),
   };
-  const preparePipeline = vi.fn(async () => ({ cacheKey: "cache-key", execute }));
+  const sourceCache = overrides.sourceCache ?? {
+    get: vi.fn(async () => ({ status: "miss" as const })),
+    put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+  };
+  const preparePipeline = vi.fn(overrides.preparePipeline ?? (async () => ({
+    cacheKey: "cache-key",
+    getCached: async () => undefined,
+    execute,
+  })));
   const controller = createReaderSessionController({
     sourceClient,
+    sourceCache,
+    networkAvailable: overrides.networkAvailable ?? (() => true),
     preparePipeline,
     loadTranslationSettings: () => ({
       apiKey: "secret-key",
@@ -83,7 +105,7 @@ function setup(execute: PreparedCachedChapterTranslation["execute"]) {
     }),
     onStateChange: (state) => states.push(state),
   });
-  return { controller, sourceClient, preparePipeline, states };
+  return { controller, sourceClient, sourceCache, preparePipeline, states };
 }
 
 describe("reader session reducer", () => {
@@ -183,7 +205,16 @@ describe("reader session controller", () => {
     ]);
     const controller = createReaderSessionController({
       sourceClient,
-      preparePipeline: async () => ({ cacheKey: "key", execute: async () => result(complete) }),
+      sourceCache: {
+        get: async () => ({ status: "miss" }),
+        put: async () => ({ status: "stored", record: {} }),
+      },
+      networkAvailable: () => true,
+      preparePipeline: async () => ({
+        cacheKey: "key",
+        getCached: async () => undefined,
+        execute: async () => result(complete),
+      }),
       loadTranslationSettings: () => ({ apiKey: "secret", userPrompt: "", translationMode: "fast" }),
     });
 
@@ -264,5 +295,131 @@ describe("reader session controller", () => {
       },
     });
     expect(JSON.stringify(controller.getState())).not.toContain(secret);
+  });
+
+  it("stores a validated online chapter without delaying translation", async () => {
+    const complete = progress("complete", [
+      { id: "p1", text: "하나" },
+      { id: "p2", text: "둘" },
+      { id: "p3", text: "셋" },
+    ]);
+    const sourceCache = {
+      get: vi.fn(async () => ({ status: "miss" as const })),
+      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+    };
+    const { controller } = setup(async () => result(complete), { sourceCache });
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+
+    expect(sourceCache.put).toHaveBeenCalledWith(chapter("1"));
+    expect(controller.getState().status).toBe("complete");
+  });
+
+  it("restores a complete cached chapter while offline without source or Gemini requests", async () => {
+    const cachedChapter = chapter("1");
+    const complete = progress("complete", [
+      { id: "p1", text: "하나" },
+      { id: "p2", text: "둘" },
+      { id: "p3", text: "셋" },
+    ]);
+    const sourceCache = {
+      get: vi.fn(async () => ({ status: "hit" as const, chapter: cachedChapter })),
+      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+    };
+    const execute = vi.fn();
+    const getCached = vi.fn(async () => result(complete, "hit"));
+    const { controller, sourceClient, preparePipeline } = setup(execute, {
+      sourceCache,
+      networkAvailable: () => false,
+      preparePipeline: async () => ({ cacheKey: "cache-key", getCached, execute }),
+    });
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1#reader-position");
+
+    expect(sourceCache.get).toHaveBeenCalledWith("https://www.69shuba.com/txt/1/1");
+    expect(sourceClient.fetchChapter).not.toHaveBeenCalled();
+    expect(preparePipeline).toHaveBeenCalledWith(expect.objectContaining({
+      chapter: expect.objectContaining({ contentHash: cachedChapter.contentHash }),
+    }));
+    expect(getCached).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+    expect(controller.getState()).toMatchObject({
+      status: "complete",
+      chapter: cachedChapter,
+      translations: complete.translations,
+    });
+  });
+
+  it.each([
+    ["source cache misses", { status: "miss" as const }, undefined],
+    ["complete translation cache misses", { status: "hit" as const, chapter: chapter("1") }, undefined],
+  ])("ends with OFFLINE when %s", async (_description, sourceLookup, cachedTranslation) => {
+    const execute = vi.fn();
+    const sourceCache = {
+      get: vi.fn(async () => sourceLookup),
+      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+    };
+    const getCached = vi.fn(async () => cachedTranslation);
+    const { controller, sourceClient } = setup(execute, {
+      sourceCache,
+      networkAvailable: () => false,
+      preparePipeline: async () => ({ cacheKey: "cache-key", getCached, execute }),
+    });
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+
+    expect(sourceClient.fetchChapter).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(controller.getState()).toEqual({
+      status: "failed",
+      error: {
+        code: "OFFLINE",
+        message: "새 콘텐츠를 열려면 네트워크 연결이 필요합니다.",
+        retryable: true,
+      },
+    });
+  });
+
+  it("does not treat a cached chapter as a force reload while offline", async () => {
+    const complete = progress("complete", [
+      { id: "p1", text: "하나" },
+      { id: "p2", text: "둘" },
+      { id: "p3", text: "셋" },
+    ]);
+    let online = true;
+    const sourceCache = {
+      get: vi.fn(async () => ({ status: "hit" as const, chapter: chapter("1") })),
+      put: vi.fn(async () => ({ status: "stored" as const, record: {} })),
+    };
+    const { controller, sourceClient } = setup(async () => result(complete), {
+      sourceCache,
+      networkAvailable: () => online,
+    });
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+    online = false;
+    await controller.forceReload();
+
+    expect(sourceClient.fetchChapter).toHaveBeenCalledOnce();
+    expect(sourceCache.get).not.toHaveBeenCalled();
+    expect(controller.getState()).toMatchObject({ status: "failed", error: { code: "OFFLINE" } });
+  });
+
+  it("keeps an online reader flow successful when source cache persistence fails", async () => {
+    const complete = progress("complete", [
+      { id: "p1", text: "하나" },
+      { id: "p2", text: "둘" },
+      { id: "p3", text: "셋" },
+    ]);
+    const sourceCache = {
+      get: vi.fn(async () => ({ status: "miss" as const })),
+      put: vi.fn(async () => { throw new Error("IndexedDB unavailable"); }),
+    };
+    const { controller } = setup(async () => result(complete), { sourceCache });
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+
+    expect(sourceCache.put).toHaveBeenCalledOnce();
+    expect(controller.getState().status).toBe("complete");
   });
 });

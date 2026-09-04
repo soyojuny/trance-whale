@@ -80,6 +80,23 @@ const pipelineDependencies = {
 };
 
 describe("cached translation pipeline", () => {
+  it("loads only a complete cached translation without preparing a Gemini request", async () => {
+    const { cache, records } = cacheDouble();
+    const translate = vi.fn();
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "이름은 음역한다." },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+    records.set(task.cacheKey, record(task.cacheKey));
+
+    const cached = await task.getCached();
+
+    expect(cached).toMatchObject({ cache: "hit", progress: { status: "complete" } });
+    expect(cached?.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
+    expect(translate).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
   it("returns a cache hit in source order without requiring or calling Gemini", async () => {
     const { cache, records } = cacheDouble();
     const translate = vi.fn();

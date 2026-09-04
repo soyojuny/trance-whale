@@ -45,6 +45,7 @@ type CachedPipelineDependencies = {
 
 export type PreparedCachedChapterTranslation = {
   cacheKey: string;
+  getCached(): Promise<CachedChapterTranslationResult | undefined>;
   execute(request?: ExecuteCachedChapterTranslationRequest): Promise<CachedChapterTranslationResult>;
 };
 
@@ -81,22 +82,30 @@ export async function prepareCachedChapterTranslation(
   const pipelineHash = dependencies.pipeline?.hash;
   const userPromptHash = await (pipelineHash ?? hashText)(request.userPrompt);
 
+  const getCached = async (): Promise<CachedChapterTranslationResult | undefined> => {
+    const cached = await dependencies.cache.get(prepared.cacheKey);
+    if (!cached) return undefined;
+
+    const progress = orderedCompleteProgress(request.chapter, cached.translatedParagraphs);
+    if (!progress) return undefined;
+
+    return {
+      cache: "hit",
+      persistence: { status: "not_attempted" },
+      progress,
+      errors: [],
+    };
+  };
+
   return {
     cacheKey: prepared.cacheKey,
+    getCached,
     async execute(execution = {}) {
       if (!execution.forceRetranslate) {
-        const cached = await dependencies.cache.get(prepared.cacheKey);
+        const cached = await getCached();
         if (cached) {
-          const progress = orderedCompleteProgress(request.chapter, cached.translatedParagraphs);
-          if (progress) {
-            execution.onProgress?.(progress);
-            return {
-              cache: "hit",
-              persistence: { status: "not_attempted" },
-              progress,
-              errors: [],
-            };
-          }
+          execution.onProgress?.(cached.progress);
+          return cached;
         }
       }
 
