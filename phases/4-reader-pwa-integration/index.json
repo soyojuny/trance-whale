@@ -32,7 +32,7 @@
       "status": "completed",
       "summary": "실제 reader session 상태를 접근 가능한 진행 정보, ID 기반 보기 모드, 점진 번역과 부분 실패 UI로 렌더링하는 리더 컴포넌트를 구현했다.",
       "started_at": "2026-09-04T16:34:09+0900",
-      "completed_at": "2026-09-04T16:36:32+0900"
+      "completed_at": "2026-09-04T16:37:32+0900"
     },
     {
       "step": 4,
