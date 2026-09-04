@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "safe-source-fetch",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T10:13:47+0900",
+      "summary": "주입 가능한 URL 검증기와 fetch를 사용해 리다이렉트별 재검증, 전체 timeout, 스트리밍 크기 제한과 HTML charset 디코딩을 적용한 안전한 source fetch를 구현했다.",
+      "completed_at": "2026-09-04T10:16:01+0900"
     },
     {
       "step": 3,
