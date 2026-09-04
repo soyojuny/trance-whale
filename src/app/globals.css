@@ -20,6 +20,7 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: Aria
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button { color: inherit; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid rgba(23,107,98,.35); outline-offset: 2px; }
 
 .app-shell { min-height: 100vh; }
 .side-rail { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 84px; display: flex; flex-direction: column; align-items: center; padding: 28px 10px 22px; background: #143e3a; color: #dce9e4; }
@@ -76,6 +77,9 @@ button { color: inherit; }
 .progress-track i { display: block; height: 100%; background: var(--teal); }
 .translation-status b { color: var(--teal); font-size: 11px; }
 .translation-status button { padding: 5px 7px; border: 0; border-bottom: 1px solid #9baaa5; background: transparent; color: #687772; font-size: 10px; cursor: pointer; }
+.translation-status.is-error { background: #f8eee8; border-left-color: #9a472f; }
+.translation-failure { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: -9px 0 21px; padding: 12px 15px; border: 1px solid #d8b4a8; color: #713725; font-size: 12px; }
+.translation-failure button { min-height: 44px; padding: 0 12px; border: 1px solid currentColor; background: var(--surface); font-weight: 700; cursor: pointer; }
 .mode-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 43px; }
 .segmented-control { display: flex; padding: 3px; background: #eeede8; }
 .segmented-control button { padding: 8px 15px; border: 0; color: #707a76; background: transparent; font-size: 11px; cursor: pointer; }
@@ -84,6 +88,12 @@ button { color: inherit; }
 .reading-copy { font-family: Georgia, "Noto Serif KR", serif; line-height: 2.08; letter-spacing: -.008em; }
 .paragraph-pair { margin-bottom: 1.65em; }
 .paragraph-pair p { margin: 0; }
+.paragraph-placeholder { min-height: 4.5em; display: grid; align-content: center; gap: 10px; }
+.paragraph-placeholder i { display: block; width: 100%; height: 8px; background: #e5e6e2; animation: pulse 1.5s ease-in-out infinite; }
+.paragraph-placeholder i:nth-child(2) { width: 88%; animation-delay: .12s; }
+.paragraph-placeholder i:nth-child(3) { width: 61%; animation-delay: .24s; }
+.failed-paragraph { min-height: 4.5em; display: flex; flex-direction: column; justify-content: center; padding: 10px 13px; border-left: 3px solid #9a472f; background: #f8eee8; color: #713725; font-family: Arial, "Noto Sans KR", sans-serif; font-size: 12px; }
+.failed-paragraph span { margin-top: 3px; }
 .original-copy { color: #89908d; font-size: .78em; line-height: 1.75; letter-spacing: .02em; }
 .mode-both .paragraph-pair { padding-left: 17px; border-left: 2px solid #e1e5e1; }
 .mode-both .original-copy { margin-bottom: .55em; }
@@ -95,6 +105,7 @@ button { color: inherit; }
 @keyframes pulse { 50% { opacity: .35; } }
 .chapter-nav { display: grid; grid-template-columns: 1fr 80px 1fr; align-items: stretch; margin-top: 70px; padding-top: 25px; border-top: 1px solid #dfded8; }
 .chapter-nav button { min-width: 0; min-height: 62px; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.chapter-nav button:disabled { color: #949d99; cursor: not-allowed; }
 .chapter-nav .nav-direction { display: flex; align-items: center; gap: 10px; }
 .chapter-nav .nav-arrow { flex: 0 0 20px; color: var(--teal); font-size: 20px; }
 .chapter-nav .nav-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 5px; }
@@ -107,6 +118,9 @@ footer { min-height: 120px; display: flex; align-items: center; justify-content:
 footer strong { color: #52645e; font-family: Georgia, serif; }
 .footer-whale { color: var(--teal); font-size: 21px; }
 .mobile-reader-tools { display: none; }
+.reader-empty-state { min-height: 180px; display: grid; place-items: center; padding: 24px; background: var(--surface); color: var(--muted); }
+.reader-actions label { display: flex; align-items: center; gap: 6px; color: #53645f; font-size: 11px; }
+.reader-actions input { width: 72px; accent-color: var(--teal); }
 
 .overlay { position: fixed; z-index: 50; inset: 0; display: flex; justify-content: flex-end; background: rgba(16,34,30,.32); animation: fade .18s ease-out; }
 .sheet { width: min(470px, 100%); height: 100%; overflow-y: auto; background: #fbfaf6; box-shadow: -14px 0 38px rgba(20,40,35,.12); animation: slide .24s ease-out; }
@@ -193,6 +207,7 @@ footer strong { color: #52645e; font-family: Georgia, serif; }
   .continue-card { grid-template-columns: 46px 1fr auto; margin-top: 31px; padding-right: 13px; }
   .reader-topbar { padding: 0 13px; }
   .reader-actions button { padding-inline: 7px; }
+  .reader-actions label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .reader-actions button svg { display: none; }
   .reader-column { width: calc(100% - 34px); padding: 55px 0 64px; }
   .reader-heading h2 { font-size: 28px; }
@@ -200,6 +215,7 @@ footer strong { color: #52645e; font-family: Georgia, serif; }
   .translation-status .progress-track { grid-column: 1 / 3; grid-row: 2; width: 100%; }
   .translation-status b { grid-column: 3; grid-row: 2; }
   .translation-status button { grid-column: 3; grid-row: 1; }
+  .translation-failure { align-items: flex-start; flex-direction: column; }
   .mode-row { align-items: flex-end; margin-bottom: 36px; }
   .segmented-control button { padding-inline: 11px; }
   .saved-state { width: 60px; line-height: 1.35; }
