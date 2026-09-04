@@ -7,6 +7,7 @@ import type { TranslationProgress } from "../../types/translation";
 import {
   prepareChapterTranslation,
   type ChapterTranslationResult,
+  type FailedChunkRetry,
 } from "./pipeline.client";
 import { TRANSLATION_MODELS, type TranslationMode } from "./models";
 import { BASE_PROMPT_VERSION } from "./prompt";
@@ -25,6 +26,7 @@ type ExecuteCachedChapterTranslationRequest = {
   apiKey?: string;
   signal?: AbortSignal;
   forceRetranslate?: boolean;
+  retryFailed?: FailedChunkRetry;
   onProgress?: (progress: TranslationProgress) => void;
 };
 
@@ -101,7 +103,7 @@ export async function prepareCachedChapterTranslation(
     cacheKey: prepared.cacheKey,
     getCached,
     async execute(execution = {}) {
-      if (!execution.forceRetranslate) {
+      if (!execution.forceRetranslate && !execution.retryFailed) {
         const cached = await getCached();
         if (cached) {
           execution.onProgress?.(cached.progress);
@@ -113,6 +115,7 @@ export async function prepareCachedChapterTranslation(
         apiKey: execution.apiKey ?? "",
         signal: execution.signal,
         onProgress: execution.onProgress,
+        retryFailed: execution.retryFailed,
       });
       const complete = result.progress.status === "complete"
         ? orderedCompleteProgress(request.chapter, result.progress.translations)

@@ -1,9 +1,14 @@
 import "client-only";
 
 import { TranslationOutputError, type PublicError } from "../errors";
+import { chunkParagraphs } from "./chunk";
 import { GeminiClientError, translateChunk } from "../../services/gemini.client";
 import { ChapterSourceSchema, type ChapterSource } from "../../types/source";
-import type { TranslationProgress } from "../../types/translation";
+import {
+  TranslationParagraphSchema,
+  type TranslationParagraph,
+  type TranslationProgress,
+} from "../../types/translation";
 import {
   createTranslationCacheKey,
   type HashText,
@@ -35,10 +40,16 @@ type PrepareChapterTranslationRequest = {
   userPrompt: string;
 };
 
-type ExecuteChapterTranslationRequest = {
+export type FailedChunkRetry = {
+  failedChunkIds: readonly string[];
+  successfulTranslations: readonly TranslationParagraph[];
+};
+
+export type ExecuteChapterTranslationRequest = {
   apiKey: string;
   signal?: AbortSignal;
   onProgress?: (progress: ChapterTranslationProgress) => void;
+  retryFailed?: FailedChunkRetry;
 };
 
 type PipelineDependencies = OrchestratorDependencies & {
@@ -50,6 +61,33 @@ export type PreparedChapterTranslation = {
   cacheKey: string;
   execute(request: ExecuteChapterTranslationRequest): Promise<ChapterTranslationResult>;
 };
+
+function validateFailedChunkRetry(
+  chapter: ChapterSource,
+  retry: FailedChunkRetry,
+  characterBudget: number | undefined,
+): boolean {
+  const chunks = chunkParagraphs(chapter.paragraphs, characterBudget);
+  const failedIds = new Set(retry.failedChunkIds);
+  if (failedIds.size === 0 || failedIds.size !== retry.failedChunkIds.length) return false;
+  if (retry.failedChunkIds.some((chunkId) => !chunks.some((chunk) => chunk.chunkId === chunkId))) return false;
+
+  const parsedSuccesses = TranslationParagraphSchema.array().safeParse(retry.successfulTranslations);
+  if (!parsedSuccesses.success) return false;
+
+  const failedParagraphIds = new Set(
+    chunks.filter((chunk) => failedIds.has(chunk.chunkId)).flatMap((chunk) => chunk.paragraphs.map(({ id }) => id)),
+  );
+  const expectedSuccessIds = chapter.paragraphs
+    .map(({ id }) => id)
+    .filter((id) => !failedParagraphIds.has(id));
+  const successIds = parsedSuccesses.data.map(({ id }) => id);
+  return (
+    successIds.length === expectedSuccessIds.length
+    && new Set(successIds).size === successIds.length
+    && successIds.every((id) => expectedSuccessIds.includes(id))
+  );
+}
 
 function safeTranslationError(error: unknown): PublicError {
   if (error instanceof GeminiClientError) return error.toJSON();
@@ -92,6 +130,26 @@ export async function prepareChapterTranslation(
   return {
     cacheKey,
     async execute(execution): Promise<ChapterTranslationResult> {
+      if (
+        execution.retryFailed
+        && !validateFailedChunkRetry(chapter, execution.retryFailed, dependencies.characterBudget)
+      ) {
+        return {
+          progress: {
+            status: "failed",
+            completedParagraphs: 0,
+            totalParagraphs: chapter.paragraphs.length,
+            translations: [],
+            failedChunkIds: [],
+          },
+          errors: [{
+            chunkId: "retry",
+            code: "TRANSLATION_FAILED",
+            message: "번역을 완료할 수 없습니다.",
+            retryable: false,
+          }],
+        };
+      }
       const latestErrors = new Map<string, unknown>();
       const trackedTranslate: Translate = async (translationRequest) => {
         try {
@@ -111,6 +169,8 @@ export async function prepareChapterTranslation(
           userPrompt,
           signal: execution.signal,
           characterBudget: dependencies.characterBudget,
+          chunkIds: execution.retryFailed?.failedChunkIds,
+          initialTranslations: execution.retryFailed?.successfulTranslations,
           onProgress: execution.onProgress,
         },
         {

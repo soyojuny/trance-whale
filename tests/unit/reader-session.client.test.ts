@@ -255,7 +255,13 @@ describe("reader session controller", () => {
 
     await controller.retryFailedTranslation();
 
-    expect(execute).toHaveBeenLastCalledWith(expect.objectContaining({ forceRetranslate: true }));
+    expect(execute).toHaveBeenLastCalledWith(expect.objectContaining({
+      forceRetranslate: false,
+      retryFailed: {
+        failedChunkIds: ["chunk-2"],
+        successfulTranslations: [{ id: "p1", text: "하나" }],
+      },
+    }));
     expect(controller.getState().status).toBe("complete");
   });
 

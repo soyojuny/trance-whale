@@ -128,6 +128,34 @@ describe("orchestrateTranslation", () => {
     expect(translate.mock.calls.filter(([call]) => call.chunk.chunkId === "chunk-0")).toHaveLength(1);
   });
 
+  it("runs only selected failed chunks and rejects translations for preserved chunks", async () => {
+    const events: TranslationProgress[] = [];
+    const translate = vi.fn(async () => [{ id: "p-1", text: "changed" }]);
+
+    const result = await orchestrateTranslation(request({
+      chunkIds: ["chunk-1"],
+      initialTranslations: [
+        { id: "p-1", text: "하나" },
+        { id: "p-3", text: "셋" },
+      ],
+      onProgress: (event: TranslationProgress) => events.push(event),
+    }), {
+      concurrency: 1,
+      maxRetries: 0,
+      translate,
+      sleep: vi.fn(),
+      jitter: () => 0,
+    });
+
+    expect(translate).toHaveBeenCalledWith(expect.objectContaining({ chunk: expect.objectContaining({ chunkId: "chunk-1" }) }));
+    expect(events[0]).toMatchObject({
+      status: "translating",
+      translations: [{ id: "p-1", text: "하나" }, { id: "p-3", text: "셋" }],
+    });
+    expect(result).toMatchObject({ status: "partial_failure", failedChunkIds: ["chunk-1"] });
+    expect(result.translations).toEqual([{ id: "p-1", text: "하나" }, { id: "p-3", text: "셋" }]);
+  });
+
   it("aborts pending work and reports cancellation while preserving completed translations", async () => {
     const controller = new AbortController();
     const translate = vi.fn(async ({ chunk, signal }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] }; signal: AbortSignal }) => {

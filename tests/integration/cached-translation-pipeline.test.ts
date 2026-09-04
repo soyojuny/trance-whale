@@ -10,7 +10,7 @@ import type {
 } from "../../src/services/translation-cache.client";
 import type { ChapterSource } from "../../src/types/source";
 import type { TranslationCacheRecord } from "../../src/types/storage";
-import type { TranslationParagraph } from "../../src/types/translation";
+import type { TranslationParagraph, TranslationProgress } from "../../src/types/translation";
 
 const chapter: ChapterSource = {
   kind: "chapter",
@@ -277,5 +277,127 @@ describe("cached translation pipeline", () => {
     expect(translate).toHaveBeenCalledTimes(3);
     expect(cache.put).toHaveBeenCalledWith(expect.objectContaining({ cacheKey: task.cacheKey }));
     expect(records.get(task.cacheKey)?.translatedParagraphs[0]?.text).toBe("p-1-fresh");
+  });
+
+  it("retries only failed chunks, retaining prior successes in progress until the merged result is cached", async () => {
+    const { cache } = cacheDouble();
+    const translate = vi.fn(async ({ chunk }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] } }) => {
+      if (chunk.chunkId === "chunk-1") throw new Error("temporary failure");
+      return translations(chunk.paragraphs);
+    });
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, maxRetries: 0, translate } },
+    );
+    const first = await task.execute({ apiKey: "test-key" });
+    const retryEvents: TranslationProgress[] = [];
+
+    vi.mocked(translate).mockImplementation(async ({ chunk }) => translations(chunk.paragraphs));
+    const retried = await task.execute({
+      apiKey: "test-key",
+      retryFailed: {
+        failedChunkIds: first.progress.failedChunkIds,
+        successfulTranslations: first.progress.translations,
+      },
+      onProgress: (progress) => retryEvents.push(progress),
+    });
+
+    expect(first.progress).toMatchObject({ status: "partial_failure", failedChunkIds: ["chunk-1"] });
+    expect(translate.mock.calls.slice(3).map(([call]) => call.chunk.chunkId)).toEqual(["chunk-1"]);
+    expect(retryEvents[0]).toMatchObject({
+      status: "translating",
+      completedParagraphs: 2,
+      translations: [{ id: "p-1" }, { id: "p-3" }],
+    });
+    expect(retried).toMatchObject({
+      cache: "miss",
+      persistence: { status: "saved" },
+      progress: { status: "complete", failedChunkIds: [] },
+    });
+    expect(retried.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains seeded successes and does not cache when a failed chunk retry fails again", async () => {
+    const { cache } = cacheDouble();
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      {
+        cache,
+        pipeline: {
+          ...pipelineDependencies,
+          maxRetries: 0,
+          translate: vi.fn(async ({ chunk }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] } }) => {
+            if (chunk.chunkId === "chunk-1") throw new Error("still failing");
+            return translations(chunk.paragraphs);
+          }),
+        },
+      },
+    );
+    const first = await task.execute({ apiKey: "test-key" });
+    vi.mocked(cache.put).mockClear();
+
+    const retried = await task.execute({
+      apiKey: "test-key",
+      retryFailed: {
+        failedChunkIds: ["chunk-1"],
+        successfulTranslations: first.progress.translations,
+      },
+    });
+
+    expect(retried.progress).toMatchObject({
+      status: "partial_failure",
+      failedChunkIds: ["chunk-1"],
+      translations: [{ id: "p-1" }, { id: "p-3" }],
+    });
+    expect(retried.persistence).toEqual({ status: "not_attempted" });
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it("safely rejects an invalid partial retry without translating or caching", async () => {
+    const { cache } = cacheDouble();
+    const translate = vi.fn();
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+
+    const result = await task.execute({
+      apiKey: "test-key",
+      retryFailed: {
+        failedChunkIds: ["chunk-1", "chunk-1"],
+        successfulTranslations: translations(chapter.paragraphs),
+      },
+    });
+
+    expect(result).toMatchObject({
+      progress: { status: "failed" },
+      persistence: { status: "not_attempted" },
+      errors: [{ code: "TRANSLATION_FAILED" }],
+    });
+    expect(translate).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an unknown failed chunk", ["chunk-9"], translations(chapter.paragraphs)],
+    ["a translation from the failed chunk", ["chunk-1"], translations(chapter.paragraphs)],
+    ["an incomplete successful set", ["chunk-1"], [{ id: "p-1", text: "p-1-ko" }]],
+  ])("rejects %s without translating or caching", async (_name, failedChunkIds, successfulTranslations) => {
+    const { cache } = cacheDouble();
+    const translate = vi.fn();
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+
+    const result = await task.execute({
+      apiKey: "test-key",
+      retryFailed: { failedChunkIds, successfulTranslations },
+    });
+
+    expect(result.progress.status).toBe("failed");
+    expect(translate).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
   });
 });

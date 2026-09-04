@@ -213,6 +213,7 @@ export function createReaderSessionController(
     task: PreparedCachedChapterTranslation,
     apiKey: string,
     forceRetranslate: boolean,
+    retryFailed?: { failedChunkIds: readonly string[]; successfulTranslations: TranslationProgress["translations"] },
   ) => {
     if (isCurrent(operation) && hasChapter(state)) {
       dispatch({
@@ -231,6 +232,7 @@ export function createReaderSessionController(
         apiKey,
         signal: activeController?.signal,
         forceRetranslate,
+        retryFailed,
         onProgress: (progress) => {
           if (isCurrent(operation) && progress.status === "translating") {
             dispatch({ type: "translation_progress", progress });
@@ -358,7 +360,10 @@ export function createReaderSessionController(
     await executeTranslation(operation, prepared, settings.apiKey, false);
   };
 
-  const rerunTranslation = async (reprepare: boolean): Promise<void> => {
+  const rerunTranslation = async (
+    reprepare: boolean,
+    retryFailed?: { failedChunkIds: readonly string[]; successfulTranslations: TranslationProgress["translations"] },
+  ): Promise<void> => {
     if (!currentChapter || !prepared) return;
     activeController?.abort();
     const operation = ++generation;
@@ -380,7 +385,7 @@ export function createReaderSessionController(
         return;
       }
     }
-    await executeTranslation(operation, prepared, settings.apiKey, true);
+    await executeTranslation(operation, prepared, settings.apiKey, reprepare, retryFailed);
   };
 
   return {
@@ -397,7 +402,12 @@ export function createReaderSessionController(
     },
     forceRetranslate: () => rerunTranslation(true),
     retryFailedTranslation: async () => {
-      if (state.status === "partial_failure") await rerunTranslation(false);
+      if (state.status === "partial_failure") {
+        await rerunTranslation(false, {
+          failedChunkIds: state.failedChunkIds,
+          successfulTranslations: state.translations,
+        });
+      }
     },
   };
 }

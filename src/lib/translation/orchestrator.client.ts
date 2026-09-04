@@ -2,6 +2,7 @@ import "client-only";
 
 import { TranslationOutputError } from "../errors";
 import { chunkParagraphs, type TranslationChunk } from "./chunk";
+import { validateTranslationOutput } from "./validate-output";
 import { GeminiClientError, translateChunk } from "../../services/gemini.client";
 import type {
   TranslationParagraph,
@@ -28,6 +29,8 @@ type OrchestratorRequest = {
   userPrompt: string;
   signal?: AbortSignal;
   characterBudget?: number;
+  chunkIds?: readonly string[];
+  initialTranslations?: readonly TranslationParagraph[];
   onProgress?: (progress: TranslationProgress) => void;
 };
 
@@ -99,6 +102,14 @@ export async function orchestrateTranslation(
   const sleep = dependencies.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const jitter = dependencies.jitter ?? (() => Math.floor(Math.random() * 101));
   const chunks = chunkParagraphs(request.paragraphs, request.characterBudget);
+  const chunksById = new Map(chunks.map((chunk) => [chunk.chunkId, chunk]));
+  const selectedChunks = request.chunkIds
+    ? request.chunkIds.map((chunkId) => {
+      const chunk = chunksById.get(chunkId);
+      if (!chunk) throw new TranslationOutputError("UNEXPECTED_ID");
+      return chunk;
+    })
+    : chunks;
   const controller = new AbortController();
   const forwardAbort = () => controller.abort();
   request.signal?.addEventListener("abort", forwardAbort, { once: true });
@@ -107,6 +118,12 @@ export async function orchestrateTranslation(
   const translations = new Map<string, TranslationParagraph>();
   const failedChunkIds: string[] = [];
   const sourceOrder = new Map(request.paragraphs.map((paragraph, index) => [paragraph.id, index]));
+  for (const paragraph of request.initialTranslations ?? []) {
+    if (!sourceOrder.has(paragraph.id) || translations.has(paragraph.id)) {
+      throw new TranslationOutputError("UNEXPECTED_ID");
+    }
+    translations.set(paragraph.id, paragraph);
+  }
   let nextChunkIndex = 0;
 
   const snapshot = (status: TranslationProgressStatus): TranslationProgress => {
@@ -133,7 +150,9 @@ export async function orchestrateTranslation(
           chunk,
           signal: controller.signal,
         });
-        completed.forEach((paragraph) => translations.set(paragraph.id, paragraph));
+        validateTranslationOutput(JSON.stringify({ translations: completed }), chunk).forEach((paragraph) => {
+          translations.set(paragraph.id, paragraph);
+        });
         request.onProgress?.(snapshot("translating"));
         return;
       } catch (error) {
@@ -148,11 +167,13 @@ export async function orchestrateTranslation(
     }
   };
 
+  if (translations.size > 0) request.onProgress?.(snapshot("translating"));
+
   const worker = async () => {
     while (!controller.signal.aborted) {
       const index = nextChunkIndex;
       nextChunkIndex += 1;
-      const chunk = chunks[index];
+      const chunk = selectedChunks[index];
       if (!chunk) return;
       await runChunk(chunk);
     }
@@ -160,7 +181,7 @@ export async function orchestrateTranslation(
 
   let cancelled = controller.signal.aborted;
   try {
-    await Promise.all(Array.from({ length: Math.min(concurrency, chunks.length) }, () => worker()));
+    await Promise.all(Array.from({ length: Math.min(concurrency, selectedChunks.length) }, () => worker()));
   } catch (error) {
     if (!isAbortError(error) && !controller.signal.aborted) throw error;
     cancelled = true;
