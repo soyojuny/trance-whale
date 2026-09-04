@@ -10,6 +10,7 @@ import { prepareCachedChapterTranslation } from "../../lib/translation/cached-pi
 import { createCatalogCache } from "../../services/catalog-cache.client";
 import { createPreferencesService, type Preferences, type StorageResult } from "../../services/preferences.client";
 import { openReaderDatabase } from "../../services/reader-db.client";
+import { createSourceCache } from "../../services/source-cache.client";
 import { createSourceClient } from "../../services/source-client.client";
 import { createTranslationCache } from "../../services/translation-cache.client";
 import type { LastReadingPosition } from "../../types/storage";
@@ -50,8 +51,11 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
   const sourceClient = createSourceClient();
   const preferences = createPreferencesService(window.localStorage);
   const translationCache = createTranslationCache({ database });
+  const sourceCache = createSourceCache({ database });
   const readerSession = createReaderSessionController({
     sourceClient,
+    sourceCache,
+    networkAvailable: () => navigator.onLine,
     loadTranslationSettings: () => preferences.loadPreferences().translation,
     preparePipeline: (request) => prepareCachedChapterTranslation(request, { cache: translationCache }),
     onStateChange: (state) => readerListener(state),
