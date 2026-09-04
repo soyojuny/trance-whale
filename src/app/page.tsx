@@ -1,5 +1,5 @@
-import ReaderPrototype from "@/components/reader-prototype";
+import HomeSettingsFlow from "@/components/home-settings-flow";
 
 export default function Home() {
-  return <ReaderPrototype />;
+  return <HomeSettingsFlow />;
 }
