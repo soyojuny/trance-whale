@@ -109,6 +109,22 @@ export function savePreferences(
   return { ok: true };
 }
 
+export function clearApiKey(storage: Storage = globalThis.localStorage): StorageResult {
+  const current = loadPreferences(storage);
+  const translation = TranslationSettingsSchema.safeParse({
+    ...current.translation,
+    apiKey: "",
+  });
+  if (!translation.success) return storageFailure("Gemini API Key를 삭제할 수 없습니다.");
+
+  try {
+    storage.setItem(PREFERENCE_STORAGE_KEYS.translation, JSON.stringify(translation.data));
+    return { ok: true };
+  } catch {
+    return storageFailure("Gemini API Key를 삭제할 수 없습니다.");
+  }
+}
+
 export function loadReadingPosition(
   storage: Storage = globalThis.localStorage,
 ): LastReadingPosition | null {
@@ -143,6 +159,7 @@ export function createPreferencesService(storage: Storage) {
   return {
     loadPreferences: () => loadPreferences(storage),
     savePreferences: (preferences: Preferences) => savePreferences(preferences, storage),
+    clearApiKey: () => clearApiKey(storage),
     loadReadingPosition: () => loadReadingPosition(storage),
     saveReadingPosition: (position: LastReadingPosition) => saveReadingPosition(position, storage),
     clearPreferences: () => clearPreferences(storage),

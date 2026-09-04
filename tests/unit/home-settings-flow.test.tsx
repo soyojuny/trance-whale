@@ -13,6 +13,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     })),
     loadReadingPosition: vi.fn(() => null),
     savePreferences: vi.fn(() => ({ ok: true as const })),
+    clearApiKey: vi.fn(() => ({ ok: true as const })),
   };
   const validateKey = vi.fn(async () => undefined);
   const localData = {
@@ -38,6 +39,7 @@ describe("HomeSettingsFlow", () => {
       loadPreferences: vi.fn(() => ({ translation: DEFAULT_TRANSLATION_SETTINGS, reader: DEFAULT_READER_SETTINGS })),
       loadReadingPosition: vi.fn(() => position),
       savePreferences: vi.fn(() => ({ ok: true as const })),
+      clearApiKey: vi.fn(() => ({ ok: true as const })),
     };
     const { navigate } = setup({ preferences });
 
@@ -97,6 +99,7 @@ describe("HomeSettingsFlow", () => {
       loadPreferences: vi.fn(() => ({ translation: DEFAULT_TRANSLATION_SETTINGS, reader: DEFAULT_READER_SETTINGS })),
       loadReadingPosition: vi.fn(() => null),
       savePreferences: vi.fn(() => ({ ok: false as const, error: { code: "STORAGE_FULL" as const, message: "설정을 저장할 수 없습니다.", retryable: true as const } })),
+      clearApiKey: vi.fn(() => ({ ok: true as const })),
     };
     setup({ preferences, onRetranslate });
     fireEvent.click(screen.getByRole("button", { name: "설정 열기" }));
@@ -106,6 +109,43 @@ describe("HomeSettingsFlow", () => {
     expect(screen.getByLabelText("번역 모델")).toHaveValue("quality");
     expect(screen.getByRole("button", { name: "현재 장 다시 번역" })).toBeDisabled();
     expect(onRetranslate).not.toHaveBeenCalled();
+  });
+
+  it("confirms deletion of a saved API Key without Gemini validation or clearing other local data", async () => {
+    let saved = {
+      translation: { ...DEFAULT_TRANSLATION_SETTINGS, apiKey: "stored-key", userPrompt: "용어 유지", translationMode: "quality" as const },
+      reader: { ...DEFAULT_READER_SETTINGS, fontSize: 21 },
+    };
+    const clearApiKey = vi.fn(() => {
+      saved = { ...saved, translation: { ...saved.translation, apiKey: "" } };
+      return { ok: true as const };
+    });
+    const preferences = {
+      loadPreferences: vi.fn(() => saved),
+      loadReadingPosition: vi.fn(() => null),
+      savePreferences: vi.fn(() => ({ ok: true as const })),
+      clearApiKey,
+    };
+    const { validateKey, localData } = setup({ preferences });
+
+    fireEvent.click(screen.getByRole("button", { name: "설정 열기" }));
+    fireEvent.click(screen.getByRole("button", { name: "API Key 삭제" }));
+    expect(screen.getByRole("group", { name: "API Key 삭제 확인" })).toBeInTheDocument();
+    expect(screen.queryByText("stored-key")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "취소" }));
+    expect(clearApiKey).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Gemini API Key")).toHaveValue("stored-key");
+
+    fireEvent.click(screen.getByRole("button", { name: "API Key 삭제" }));
+    fireEvent.click(screen.getByRole("button", { name: "API Key 삭제 확인" }));
+    expect(clearApiKey).toHaveBeenCalledTimes(1);
+    expect(validateKey).not.toHaveBeenCalled();
+    expect(localData.clearAll).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Gemini API Key")).toHaveValue("");
+    expect(screen.getByLabelText("나만의 번역 지시")).toHaveValue("용어 유지");
+    expect(screen.getByLabelText("번역 모델")).toHaveValue("quality");
+    expect(screen.getByLabelText("본문 글자 크기")).toHaveValue("21");
+    expect(screen.getByText("API Key를 삭제했습니다.")).toBeInTheDocument();
   });
 
   it("confirms reset and safely reports partial failures", async () => {
@@ -125,4 +165,5 @@ describe("HomeSettingsFlow", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("읽기 데이터");
     expect(clearAll).toHaveBeenCalledTimes(1);
   });
+
 });

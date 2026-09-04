@@ -37,8 +37,9 @@
     {
       "step": 4,
       "name": "api-key-deletion",
-      "status": "pending",
-      "started_at": "2026-09-04T22:57:34+0900"
+      "status": "completed",
+      "started_at": "2026-09-04T22:57:34+0900",
+      "summary": "Settings now delete only a saved Gemini API Key through an explicit confirmation without validation or clearing other local data."
     },
     {
       "step": 5,

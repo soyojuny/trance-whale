@@ -17,6 +17,7 @@ type PreferencesPort = {
   loadPreferences(): Preferences;
   loadReadingPosition(): LastReadingPosition | null;
   savePreferences(preferences: Preferences): StorageResult;
+  clearApiKey(): StorageResult;
 };
 
 type LocalDataPort = { clearAll(): Promise<LocalDataResetResult> };
@@ -78,6 +79,7 @@ export default function HomeSettingsFlow({
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [message, setMessage] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmKeyDeletion, setConfirmKeyDeletion] = useState(false);
   const openerRef = useRef<HTMLButtonElement>(null);
   const initialFocusRef = useRef<HTMLInputElement>(null);
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
@@ -94,6 +96,7 @@ export default function HomeSettingsFlow({
     setOpen(false);
     setRevealKey(false);
     setConfirmReset(false);
+    setConfirmKeyDeletion(false);
     requestAnimationFrame(() => openerRef.current?.focus());
   }
 
@@ -181,6 +184,27 @@ export default function HomeSettingsFlow({
     setMessage("저장된 데이터를 모두 삭제했습니다.");
   }
 
+  function clearApiKey(): void {
+    const preferenceService = services.preferences;
+    if (!preferenceService) {
+      setMessage("Gemini API Key를 삭제할 수 없습니다.");
+      return;
+    }
+    const result = preferenceService.clearApiKey();
+    if (!result.ok) {
+      setMessage(result.error.message);
+      return;
+    }
+
+    const cleared = preferenceService.loadPreferences();
+    setSaved(cleared);
+    setDraft(cleared);
+    setConfirmKeyDeletion(false);
+    setRevealKey(false);
+    setStatus("idle");
+    setMessage("API Key를 삭제했습니다.");
+  }
+
   function dismissOverlay(event: MouseEvent<HTMLDivElement>): void {
     if (event.target === event.currentTarget) closeSheet();
   }
@@ -243,6 +267,17 @@ export default function HomeSettingsFlow({
                   <input id="api-key" type={revealKey ? "text" : "password"} autoComplete="off" value={draft.translation.apiKey} onChange={(event) => setDraft({ ...draft, translation: { ...draft.translation, apiKey: event.target.value } })} />
                   <button type="button" onClick={() => setRevealKey((value) => !value)}>{revealKey ? "API Key 숨기기" : "API Key 표시"}</button>
                 </div>
+                {saved.translation.apiKey && (
+                  !confirmKeyDeletion ? (
+                    <button className="destructive-button" type="button" onClick={() => setConfirmKeyDeletion(true)} disabled={dirty}>API Key 삭제</button>
+                  ) : (
+                    <div role="group" aria-label="API Key 삭제 확인">
+                      <p>저장된 Gemini API Key를 삭제할까요?</p>
+                      <button type="button" onClick={() => setConfirmKeyDeletion(false)}>취소</button>
+                      <button className="destructive-button" type="button" onClick={clearApiKey}>API Key 삭제 확인</button>
+                    </div>
+                  )
+                )}
                 <p>Key는 브라우저에만 저장되고 앱 서버로 전송되지 않습니다. 브라우저 저장소는 완전한 보안 저장소가 아닙니다.</p>
                 <p>입력 본문은 Gemini 데이터 처리 정책을 따르며 무료 등급 데이터가 제품 개선에 사용될 수 있습니다. 외부 콘텐츠의 저작권과 이용약관 준수 책임은 사용자에게 있습니다.</p>
               </section>

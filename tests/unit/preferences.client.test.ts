@@ -92,6 +92,20 @@ describe("local preferences service", () => {
     for (const key of Object.values(PREFERENCE_STORAGE_KEYS)) expect(storage.getItem(key)).toBeNull();
   });
 
+  it("removes only the API Key while preserving other preferences and reading position", () => {
+    const storage = new MemoryStorage();
+    const service = createPreferencesService(storage);
+    service.savePreferences({ translation, reader });
+    service.saveReadingPosition(position);
+
+    expect(service.clearApiKey()).toEqual({ ok: true });
+    expect(service.loadPreferences()).toEqual({
+      translation: { ...translation, apiKey: "" },
+      reader,
+    });
+    expect(service.loadReadingPosition()).toEqual(position);
+  });
+
   it("identifies only app setting keys for cross-tab synchronization", () => {
     expect(isAppPreferenceStorageKey(PREFERENCE_STORAGE_KEYS.translation)).toBe(true);
     expect(isAppPreferenceStorageKey(PREFERENCE_STORAGE_KEYS.reader)).toBe(true);
