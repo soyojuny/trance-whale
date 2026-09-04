@@ -7,7 +7,7 @@
       "name": "storage-contracts",
       "status": "completed",
       "started_at": "2026-09-04T14:56:53+0900",
-      "completed_at": "2026-09-04T14:59:00+0900",
+      "completed_at": "2026-09-04T14:59:55+0900",
       "summary": "localStorage 설정과 IndexedDB 번역·목차 캐시를 위한 strict Zod 런타임 계약 및 기본값을 정의했다."
     },
     {
