@@ -1,5 +1,7 @@
 "use client";
 
+import type { RefObject } from "react";
+
 import type { ReaderSessionState } from "../../lib/reader/session.client";
 import type { NavigationTarget } from "../../types/source";
 import type { ReaderSettings, ViewMode } from "../../types/storage";
@@ -12,6 +14,7 @@ type ReaderViewProps = {
   onSettingsChange?: (settings: ReaderSettings) => void;
   onNavigateChapter?: (url: string) => void;
   onOpenCatalog?: (url: string) => void;
+  catalogButtonRef?: RefObject<HTMLButtonElement | null>;
 };
 
 const MODE_LABELS: Array<{ mode: ViewMode; label: string }> = [
@@ -64,6 +67,7 @@ export default function ReaderView({
   onSettingsChange,
   onNavigateChapter,
   onOpenCatalog,
+  catalogButtonRef,
 }: ReaderViewProps) {
   if (!("chapter" in state)) {
     return <section className="reader-empty-state" role="status">{state.status === "failed" ? state.error.message : statusLabel(state.status)}</section>;
@@ -85,7 +89,7 @@ export default function ReaderView({
           {chapter.chapterNumber && <span>제{chapter.chapterNumber}화</span>}
         </div>
         <div className="reader-actions">
-          <button type="button" disabled={!chapter.navigation.catalog} onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}>목차</button>
+          <button ref={catalogButtonRef} type="button" disabled={!chapter.navigation.catalog} onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}>목차</button>
           <label>본문 글자 크기 <input type="range" min="16" max="24" value={fontSize} onChange={(event) => onSettingsChange?.({ ...settings, fontSize: Number(event.target.value) })} /></label>
           <label>본문 줄 간격 <input type="range" min="1.5" max="2.5" step="0.1" value={settings.lineHeight} onChange={(event) => onSettingsChange?.({ ...settings, lineHeight: Number(event.target.value) })} /></label>
         </div>
