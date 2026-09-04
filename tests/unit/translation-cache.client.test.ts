@@ -49,6 +49,7 @@ class MemoryDatabase implements ReaderDatabase {
         return key;
       },
       delete: async (key: IDBValidKey) => { this.values.delete(key); },
+      clear: async () => { this.values.clear(); },
       iterateIndex: async <V>() => [...this.values.values()]
         .sort((left, right) => String((left as { accessedAt: string }).accessedAt).localeCompare(String((right as { accessedAt: string }).accessedAt))) as V[],
     };

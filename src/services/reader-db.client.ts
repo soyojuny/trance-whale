@@ -41,6 +41,7 @@ export interface ReaderDbStore {
   get<T>(key: IDBValidKey): Promise<T | undefined>;
   put(value: unknown, key?: IDBValidKey): Promise<IDBValidKey>;
   delete(key: IDBValidKey): Promise<void>;
+  clear(): Promise<void>;
   iterateIndex<T>(indexName: string, direction?: IDBCursorDirection): Promise<T[]>;
 }
 
@@ -84,6 +85,9 @@ function createStore(store: IDBObjectStore): ReaderDbStore {
     ),
     delete: async (key: IDBValidKey) => {
       await requestToPromise(store.delete(key));
+    },
+    clear: async () => {
+      await requestToPromise(store.clear());
     },
     iterateIndex: <T>(indexName: string, direction: IDBCursorDirection = "next") =>
       new Promise<T[]>((resolve, reject) => {
