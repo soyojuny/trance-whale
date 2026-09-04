@@ -61,7 +61,10 @@
     {
       "step": 7,
       "name": "mvp-reader-e2e",
-      "status": "pending"
+      "status": "completed",
+      "summary": "실제 Phase 4 UI와 브라우저 경계를 연결하고 결정적 production Playwright E2E로 MVP 리더·캐시·오프라인·반응형·키보드 흐름을 검증했다.",
+      "started_at": "2026-09-04T16:55:08+0900",
+      "completed_at": "2026-09-04T17:10:50+0900"
     }
   ],
   "created_at": "2026-09-04T15:57:43+0900"

@@ -131,6 +131,7 @@ describe("reader session controller", () => {
       "fetching_source",
       "parsing_response",
       "checking_cache",
+      "translating",
       "complete",
     ]);
     expect(controller.getState().status).toBe("complete");
@@ -157,6 +158,7 @@ describe("reader session controller", () => {
 
     const translating = states.filter((state) => state.status === "translating");
     expect(translating.map((state) => state.translations.map(({ id }) => id))).toEqual([
+      [],
       ["p2"],
       ["p1", "p2"],
     ]);

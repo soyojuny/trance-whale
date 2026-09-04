@@ -76,7 +76,7 @@ describe("service worker cache boundary", () => {
     );
 
     expect(await response.text()).toBe("shell");
-    expect(cache.match).toHaveBeenCalledWith(APP_SHELL_PATH);
+    expect(cache.match).toHaveBeenCalledWith("/read");
     expect(network).toHaveBeenCalledTimes(1);
   });
 

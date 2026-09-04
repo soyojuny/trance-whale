@@ -4,6 +4,7 @@ export const APP_SHELL_CACHE_NAME = `${APP_CACHE_STORAGE_PREFIX}${APP_SHELL_BUIL
 export const APP_SHELL_PATH = "/";
 export const PRECACHE_PATHS = [
   APP_SHELL_PATH,
+  "/read",
   "/manifest.webmanifest",
   "/icons/icon-192.svg",
   "/icons/icon-512.svg",

@@ -4,12 +4,12 @@
 
 이 문서는 Trance Whale MVP의 화면 구성과 사용자 경험 기준을 정의한다. 제품 요구사항은 `docs/PRD.md`, 시스템 경계와 저장 정책은 `docs/ARCHITECTURE.md`를 우선한다.
 
-- 기준 프로토타입: `src/components/reader-prototype.tsx`
+- 기준 구현: `src/components/home-settings-flow.tsx`, `src/components/reader/reader-view.tsx`
 - 기준 스타일: `src/app/globals.css`
 - 대상 화면: URL 입력, 이어 읽기, 리더, 목차, 읽기 및 번역 설정
 - MVP는 한 번에 한 작품을 읽는 흐름을 우선한다.
 - 여러 책 등록, 내 서재와 책별 설정은 향후 기능이며 MVP 화면에 미리 노출하지 않는다.
-- 프로토타입의 데이터와 인터랙션은 CX 검토용이다. 실제 수집, 번역, 검증과 영구 저장 동작을 의미하지 않는다.
+- 화면은 실제 수집, 번역, 검증과 영구 저장 세션 상태를 렌더링한다.
 
 ## 2. 디자인 원칙
 

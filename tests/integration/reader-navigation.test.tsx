@@ -9,7 +9,10 @@ import type { ReaderSessionState } from "../../src/lib/reader/session.client";
 import { DEFAULT_READER_SETTINGS, DEFAULT_TRANSLATION_SETTINGS, type LastReadingPosition } from "../../src/types/storage";
 import type { ChapterSource } from "../../src/types/source";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 beforeEach(() => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);

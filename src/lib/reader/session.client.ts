@@ -193,6 +193,18 @@ export function createReaderSessionController(
     apiKey: string,
     forceRetranslate: boolean,
   ) => {
+    if (isCurrent(operation) && hasChapter(state)) {
+      dispatch({
+        type: "translation_progress",
+        progress: {
+          status: "translating",
+          completedParagraphs: state.completedParagraphs,
+          totalParagraphs: state.totalParagraphs,
+          translations: state.translations,
+          failedChunkIds: state.failedChunkIds,
+        },
+      });
+    }
     try {
       const translationResult = await task.execute({
         apiKey,

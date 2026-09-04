@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import CatalogSheet from "../catalog-sheet";
 import { createCatalogSession, type CatalogSession, type CatalogSessionState } from "../../lib/catalog/session.client";
@@ -77,15 +77,20 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
 
 export default function ReaderNavigation({ initialUrl, navigate, runtime: suppliedRuntime }: ReaderNavigationProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedUrl = initialUrl || searchParams.get("url") || "";
   const push = navigate ?? ((href: string) => router.push(href));
   const [runtime, setRuntime] = useState<ReaderNavigationRuntime | null>(suppliedRuntime ?? null);
   const [readerState, setReaderState] = useState<ReaderSessionState>({ status: "idle" });
   const [catalogState, setCatalogState] = useState<CatalogSessionState>({ status: "idle" });
   const [settings, setSettings] = useState(() => suppliedRuntime?.preferences.loadPreferences().reader);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const desktopCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const catalogReturnFocusRef = useRef<HTMLElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const settingsCloseRef = useRef<HTMLButtonElement>(null);
   const activeCanonicalRef = useRef<string | undefined>(undefined);
   const latestScrollRef = useRef(0);
   const lastOpenedUrlRef = useRef<string | undefined>(undefined);
@@ -125,7 +130,7 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
   }, []);
 
   useEffect(() => {
-    if (!runtime || !initialUrl || lastOpenedUrlRef.current === initialUrl) return;
+    if (!runtime || !requestedUrl || lastOpenedUrlRef.current === requestedUrl) return;
     if (lastOpenedUrlRef.current) {
       savePosition(runtime, activeCanonicalRef.current, window.scrollY);
       runtime.readerSession.cancel();
@@ -133,9 +138,9 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
       latestScrollRef.current = 0;
       window.scrollTo({ top: 0, behavior: "auto" });
     }
-    lastOpenedUrlRef.current = initialUrl;
-    void runtime.readerSession.openChapter(initialUrl);
-  }, [initialUrl, runtime, savePosition]);
+    lastOpenedUrlRef.current = requestedUrl;
+    void runtime.readerSession.openChapter(requestedUrl);
+  }, [requestedUrl, runtime, savePosition]);
 
   const canonicalUrl = "chapter" in readerState ? readerState.chapter.canonicalUrl : undefined;
   useEffect(() => {
@@ -172,6 +177,20 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
 
   useEffect(() => () => runtime?.close(), [runtime]);
 
+  useEffect(() => {
+    if (!settingsOpen) return;
+    settingsCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSettingsOpen(false);
+        requestAnimationFrame(() => settingsButtonRef.current?.focus());
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [settingsOpen]);
+
   const navigateChapter = (url: string) => push(readerHref(url));
   const openCatalog = (url: string, trigger = desktopCatalogButtonRef.current) => {
     if (!runtime) return;
@@ -186,6 +205,10 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
   return (
     <main className="app-shell reader-page">
       <button type="button" className="reader-home-button" onClick={() => push("/")} aria-label="홈으로 이동">홈</button>
+      <div className="reader-session-actions">
+        <button type="button" aria-label="현재 장 다시 불러오기" onClick={() => void runtime.readerSession.forceReload()}>다시 불러오기</button>
+        <button ref={settingsButtonRef} type="button" aria-label="읽기 및 번역 설정 열기" onClick={() => setSettingsOpen(true)}>설정</button>
+      </div>
       <ReaderView
         state={readerState}
         settings={settings}
@@ -220,6 +243,32 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
         />
       )}
       {catalogOpen && catalogState.status === "error" && <p role="alert">{catalogState.message}</p>}
+      {settingsOpen && (
+        <div className="overlay" onMouseDown={(event: MouseEvent<HTMLDivElement>) => {
+          if (event.target === event.currentTarget) {
+            setSettingsOpen(false);
+            requestAnimationFrame(() => settingsButtonRef.current?.focus());
+          }
+        }}>
+          <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="reader-settings-title">
+            <header>
+              <div><span>SETTINGS</span><h2 id="reader-settings-title">읽기 및 번역 설정</h2></div>
+              <button ref={settingsCloseRef} type="button" className="icon-button" aria-label="설정 닫기" onClick={() => {
+                setSettingsOpen(false);
+                requestAnimationFrame(() => settingsButtonRef.current?.focus());
+              }}>닫기</button>
+            </header>
+            <div className="settings-body">
+              <p>저장된 번역 설정으로 현재 장을 다시 번역할 수 있습니다.</p>
+              <button className="retranslate-button" type="button" aria-label="현재 장 다시 번역" onClick={() => {
+                setSettingsOpen(false);
+                void runtime.readerSession.forceRetranslate();
+                requestAnimationFrame(() => settingsButtonRef.current?.focus());
+              }}>현재 장 다시 번역</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

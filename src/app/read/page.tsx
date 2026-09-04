@@ -1,11 +1,6 @@
+import { Suspense } from "react";
 import ReaderNavigation from "@/components/reader/reader-navigation.client";
 
-type ReadPageProps = {
-  searchParams: Promise<{ url?: string | string[] }>;
-};
-
-export default async function ReadPage({ searchParams }: ReadPageProps) {
-  const { url } = await searchParams;
-  const initialUrl = typeof url === "string" ? url : "";
-  return <ReaderNavigation initialUrl={initialUrl} />;
+export default function ReadPage() {
+  return <Suspense fallback={<main className="reader-empty-state" role="status">리더 준비 중</main>}><ReaderNavigation initialUrl="" /></Suspense>;
 }
