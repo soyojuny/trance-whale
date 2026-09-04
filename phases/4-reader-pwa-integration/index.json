@@ -1,0 +1,49 @@
+{
+  "project": "Trance Whale",
+  "phase": "reader-pwa-integration",
+  "steps": [
+    {
+      "step": 0,
+      "name": "browser-source-client",
+      "status": "completed",
+      "summary": "앱의 장·목차 API만 호출하고 응답·공개 오류·취소 경계를 검증하는 브라우저 source client를 구현했다.",
+      "started_at": "2026-09-04T15:57:43+0900"
+    },
+    {
+      "step": 1,
+      "name": "reader-session-controller",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "home-and-settings-flow",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "reader-presentation",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "catalog-sheet",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "reader-navigation-and-position",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "pwa-shell-and-offline",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "mvp-reader-e2e",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-04T15:57:43+0900"
+}

@@ -14,6 +14,10 @@
       "dir": "3-local-persistence",
       "status": "completed",
       "completed_at": "2026-09-04T15:21:44+0900"
+    },
+    {
+      "dir": "4-reader-pwa-integration",
+      "status": "pending"
     }
   ]
 }
