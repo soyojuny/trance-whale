@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { metadata } from "../../src/app/layout";
 import manifest from "../../src/app/manifest";
 
 describe("PWA manifest", () => {
@@ -18,5 +19,13 @@ describe("PWA manifest", () => {
       expect.objectContaining({ src: "/icons/icon-192.svg", sizes: "192x192" }),
       expect.objectContaining({ src: "/icons/icon-512.svg", sizes: "512x512" }),
     ]));
+  });
+});
+
+describe("root metadata", () => {
+  it("declares the application icon for browser tabs", () => {
+    expect(metadata.icons).toEqual({
+      icon: [{ url: "/icons/icon-192.svg", type: "image/svg+xml" }],
+    });
   });
 });

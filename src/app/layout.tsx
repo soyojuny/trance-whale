@@ -7,6 +7,9 @@ export const metadata: Metadata = {
   description: "외국어 웹소설을 자연스러운 한국어로 읽는 PWA 리더",
   applicationName: "Trance Whale",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icons/icon-192.svg", type: "image/svg+xml" }],
+  },
   appleWebApp: { capable: true, title: "Trance Whale", statusBarStyle: "default" },
 };
 
