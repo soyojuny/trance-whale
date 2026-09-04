@@ -22,7 +22,8 @@
     },
     {
       "dir": "5-prd-gap-remediation",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-09-04T23:41:42+0900"
     }
   ]
 }
