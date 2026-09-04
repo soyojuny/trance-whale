@@ -32,12 +32,13 @@
       "status": "completed",
       "started_at": "2026-09-04T22:51:22+0900",
       "summary": "Partial failures now expose de-duplicated safe public error messages and only retry eligible failed chunks while preserving completed paragraphs.",
-      "completed_at": "2026-09-04T22:57:34+0900"
+      "completed_at": "2026-09-04T22:57:42+0900"
     },
     {
       "step": 4,
       "name": "api-key-deletion",
-      "status": "pending"
+      "status": "pending",
+      "started_at": "2026-09-04T22:57:34+0900"
     },
     {
       "step": 5,
