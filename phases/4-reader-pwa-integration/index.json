@@ -7,7 +7,8 @@
       "name": "browser-source-client",
       "status": "completed",
       "summary": "앱의 장·목차 API만 호출하고 응답·공개 오류·취소 경계를 검증하는 브라우저 source client를 구현했다.",
-      "started_at": "2026-09-04T15:57:43+0900"
+      "started_at": "2026-09-04T15:57:43+0900",
+      "completed_at": "2026-09-04T16:00:53+0900"
     },
     {
       "step": 1,
