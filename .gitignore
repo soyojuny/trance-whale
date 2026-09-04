@@ -1,0 +1,41 @@
+# dependencies
+/node_modules/
+
+# Next.js build output
+/.next/
+/out/
+
+# tests
+/coverage/
+/playwright-report/
+/test-results/
+
+# local environment and secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# generated TypeScript files
+next-env.d.ts
+*.tsbuildinfo
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# phase execution outputs
+phases/**/phase*-output.json
+phases/**/step*-output.json
