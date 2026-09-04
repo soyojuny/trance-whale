@@ -48,9 +48,19 @@ describe("HomeSettingsFlow", () => {
     fireEvent.click(screen.getByRole("button", { name: "이어 읽기" }));
     expect(navigate).toHaveBeenCalledWith(`/read?url=${encodeURIComponent(position.canonicalUrl)}`);
 
-    fireEvent.change(screen.getByLabelText("웹소설 장 URL"), { target: { value: "https://www.69shuba.com/txt/1/2?a=b" } });
+    fireEvent.change(screen.getByLabelText("웹소설 장 URL"), { target: { value: "http://www.69shuba.com/txt/1/2?a=b#reader" } });
     fireEvent.click(screen.getByRole("button", { name: "번역해서 읽기" }));
-    expect(navigate).toHaveBeenLastCalledWith("/read?url=https%3A%2F%2Fwww.69shuba.com%2Ftxt%2F1%2F2%3Fa%3Db");
+    expect(navigate).toHaveBeenLastCalledWith("/read?url=http%3A%2F%2Fwww.69shuba.com%2Ftxt%2F1%2F2%3Fa%3Db%23reader");
+  });
+
+  it("defers supported-host decisions to the server source boundary", () => {
+    const { navigate } = setup();
+
+    fireEvent.change(screen.getByLabelText("웹소설 장 URL"), { target: { value: "http://unsupported.example/chapter?from=home" } });
+    fireEvent.click(screen.getByRole("button", { name: "번역해서 읽기" }));
+
+    expect(navigate).toHaveBeenCalledWith("/read?url=http%3A%2F%2Funsupported.example%2Fchapter%3Ffrom%3Dhome");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("validates a changed key directly before saving the complete settings", async () => {

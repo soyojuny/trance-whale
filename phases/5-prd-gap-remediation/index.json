@@ -45,8 +45,10 @@
     {
       "step": 5,
       "name": "http-url-normalization",
-      "status": "pending",
-      "started_at": "2026-09-04T23:01:28+0900"
+      "status": "completed",
+      "started_at": "2026-09-04T23:01:28+0900",
+      "summary": "Browser source requests normalize valid HTTP chapter and catalog URLs to HTTPS while server URL validation remains the sole host and SSRF boundary.",
+      "completed_at": "2026-09-04T23:03:22+0900"
     },
     {
       "step": 6,

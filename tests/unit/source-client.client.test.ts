@@ -78,6 +78,33 @@ describe("source client", () => {
     expect(String(init?.body)).not.toContain(SECRET);
   });
 
+  it.each([
+    ["chapter", "/api/source/chapter", "http://www.69shuba.com/txt/48273/32028706?from=home#reader", chapter],
+    ["catalog", "/api/source/catalog", "http://www.69shuba.com/book/48273/?from=reader#contents", catalog],
+  ] as const)("normalizes valid HTTP %s URLs to HTTPS before posting to the app API", async (kind, path, input, result) => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(result));
+    const client = createSourceClient(fetchImpl);
+
+    if (kind === "chapter") await client.fetchChapter(input, new AbortController().signal);
+    else await client.fetchCatalog(input, new AbortController().signal);
+
+    const [requestUrl, init] = fetchImpl.mock.calls[0];
+    expect(requestUrl).toBe(path);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      url: input.replace(/^http:/, "https:"),
+    });
+  });
+
+  it("preserves HTTPS query and fragment components in the source request", async () => {
+    const input = "https://www.69shuba.com/txt/48273/32028706?from=reader#paragraph-2";
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(chapter));
+    const client = createSourceClient(fetchImpl);
+
+    await client.fetchChapter(input, new AbortController().signal);
+
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toEqual({ url: input });
+  });
+
   it("validates the URL before making a request", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     const client = createSourceClient(fetchImpl);

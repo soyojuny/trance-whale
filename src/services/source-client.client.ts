@@ -54,6 +54,12 @@ async function decodeJson(response: Response): Promise<unknown> {
   }
 }
 
+function normalizeRequestUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol === "http:") url.protocol = "https:";
+  return url.href;
+}
+
 export function createSourceClient(
   fetchImpl: FetchImplementation = fetch,
   networkAvailable = () => typeof navigator === "undefined" || navigator.onLine,
@@ -68,12 +74,19 @@ export function createSourceClient(
     if (!requestBody.success) throw sourceError("INVALID_URL");
     if (!networkAvailable()) throw sourceError("OFFLINE");
 
+    let normalizedUrl: string;
+    try {
+      normalizedUrl = normalizeRequestUrl(requestBody.data.url);
+    } catch {
+      throw sourceError("INVALID_URL");
+    }
+
     let response: Response;
     try {
       response = await fetchImpl(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(requestBody.data),
+        body: JSON.stringify({ url: normalizedUrl }),
         signal,
       });
     } catch (error) {

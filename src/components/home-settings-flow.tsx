@@ -31,8 +31,6 @@ export type HomeSettingsFlowProps = {
   onRetranslate?: () => void;
 };
 
-const supportedHost = "www.69shuba.com";
-
 function defaultNavigate(href: string): void {
   globalThis.location.assign(href);
 }
@@ -124,8 +122,8 @@ export default function HomeSettingsFlow({
       setUrlError("올바른 URL을 입력해 주세요.");
       return;
     }
-    if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.hostname !== supportedHost) {
-      setUrlError("현재 지원하지 않는 사이트입니다.");
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      setUrlError("올바른 URL을 입력해 주세요.");
       return;
     }
     setUrlError("");
