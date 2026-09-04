@@ -37,7 +37,10 @@
     {
       "step": 4,
       "name": "chapter-source-route",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T10:22:37+0900",
+      "summary": "요청 제한과 공개 오류 매핑을 적용한 얇은 Chapter Route Handler와 주입 가능한 안전 수집·추출 파이프라인을 통합 테스트로 검증했다.",
+      "completed_at": "2026-09-04T10:25:45+0900"
     },
     {
       "step": 5,
