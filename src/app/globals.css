@@ -142,6 +142,11 @@ footer strong { color: #52645e; font-family: Georgia, serif; }
 .catalog-body li i { display: none; color: var(--teal); font-style: normal; }
 .catalog-body li.current button { background: var(--teal-pale); }
 .catalog-body li.current i { display: inline; }
+.catalog-virtual-list { contain: strict; }
+.catalog-virtual-list .catalog-list-spacer { position: absolute; width: 1px; padding: 0; border: 0; pointer-events: none; }
+.catalog-virtual-list li:not(.catalog-list-spacer) button { height: 56px; }
+.catalog-warning { margin: 0 0 14px; padding: 10px 12px; color: var(--amber); background: #f7eee2; font-size: 11px; line-height: 1.5; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .settings-body { display: grid; gap: 28px; }
 .settings-body section { padding-bottom: 27px; border-bottom: 1px solid var(--line); }
 .setting-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }

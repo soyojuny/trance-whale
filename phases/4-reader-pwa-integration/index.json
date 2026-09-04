@@ -37,7 +37,9 @@
     {
       "step": 4,
       "name": "catalog-sheet",
-      "status": "pending"
+      "status": "completed",
+      "summary": "fresh/stale 목차 캐시 세션과 검색·정렬·접근성 상태·고정 높이 가상화를 갖춘 반응형 목차 시트를 구현했다.",
+      "started_at": "2026-09-04T16:37:32+0900"
     },
     {
       "step": 5,
