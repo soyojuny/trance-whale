@@ -1,0 +1,45 @@
+{
+  "project": "Trance Whale",
+  "phase": "local-persistence",
+  "steps": [
+    {
+      "step": 0,
+      "name": "storage-contracts",
+      "status": "completed",
+      "started_at": "2026-09-04T14:56:53+0900",
+      "completed_at": "2026-09-04T14:59:00+0900",
+      "summary": "localStorage 설정과 IndexedDB 번역·목차 캐시를 위한 strict Zod 런타임 계약 및 기본값을 정의했다."
+    },
+    {
+      "step": 1,
+      "name": "local-preferences",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "reader-database",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "translation-cache",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "catalog-cache",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "local-data-reset",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "cached-translation-pipeline",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-04T14:56:53+0900"
+}
