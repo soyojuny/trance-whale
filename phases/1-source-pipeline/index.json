@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-09-04T10:06:06+0900",
       "summary": "정확한 허용 hostname과 HTTPS URL 구성요소를 검증하고, 주입형 DNS resolver의 모든 IPv4/IPv6 결과가 공인 unicast인지 확인하는 서버 전용 검증기를 구현했다.",
-      "completed_at": "2026-09-04T10:12:34+0900"
+      "completed_at": "2026-09-04T10:13:47+0900"
     },
     {
       "step": 2,
