@@ -16,7 +16,7 @@
       "status": "completed",
       "summary": "장 수집과 캐시 번역 파이프라인을 안전한 상태 머신, 취소·전환·부분 실패 재시도·강제 갱신 경계로 조율하는 reader session controller를 구현했다.",
       "started_at": "2026-09-04T16:00:53+0900",
-      "completed_at": "2026-09-04T16:05:20+0900"
+      "completed_at": "2026-09-04T16:06:04+0900"
     },
     {
       "step": 2,
