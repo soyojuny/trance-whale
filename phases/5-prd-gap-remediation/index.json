@@ -53,8 +53,9 @@
     {
       "step": 6,
       "name": "prd-validation-evidence",
-      "status": "pending",
-      "started_at": "2026-09-04T23:04:22+0900"
+      "status": "completed",
+      "started_at": "2026-09-04T23:04:22+0900",
+      "summary": "Added traceable PRD validation evidence, a 10-chapter manual quality rubric, and concrete ADRs for source caching and selective retry."
     },
     {
       "step": 7,
