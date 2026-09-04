@@ -284,6 +284,7 @@ export async function collectShuba69Catalog(
   sourceUrl: URL,
   loadPage: (url: URL) => Promise<string>,
   maxPages: number,
+  failOnPaginationBoundary = false,
 ): Promise<CatalogSource> {
   if (!Number.isInteger(maxPages) || maxPages < 1) {
     throw new RangeError("maxPages must be a positive integer");
@@ -302,7 +303,19 @@ export async function collectShuba69Catalog(
       chapters.push({ ...chapter, sourceIndex: chapters.length });
     }
 
-    if (pageCount === maxPages || !page.nextUrl || visitedPages.has(page.nextUrl.href)) break;
+    if (!page.nextUrl) break;
+    if (visitedPages.has(page.nextUrl.href)) {
+      if (failOnPaginationBoundary) {
+        throw new SourceContractError("EXTRACTION_FAILED", "Catalog pagination cycle detected");
+      }
+      break;
+    }
+    if (pageCount === maxPages) {
+      if (failOnPaginationBoundary) {
+        throw new SourceContractError("EXTRACTION_FAILED", "Catalog page limit exceeded");
+      }
+      break;
+    }
     visitedPages.add(page.nextUrl.href);
     const nextHtml = await loadPage(page.nextUrl);
     page = extractCatalogPage(nextHtml, page.nextUrl);
