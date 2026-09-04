@@ -78,6 +78,7 @@ export default function ReaderView({
   const percentage = state.totalParagraphs === 0 ? 0 : Math.round((state.completedParagraphs / state.totalParagraphs) * 100);
   const isTranslating = state.status === "translating";
   const isPartialFailure = state.status === "partial_failure";
+  const isRetryingFailedChunks = isTranslating && state.retryingFailedChunks;
   const fontSize = Math.min(24, Math.max(16, settings.fontSize));
 
   return (
@@ -112,7 +113,17 @@ export default function ReaderView({
         {isPartialFailure && (
           <div className="translation-failure" role="alert">
             <span>번역하지 못한 문단이 {state.totalParagraphs - state.completedParagraphs}개 있습니다.</span>
-            <button type="button" aria-label="실패한 문단 다시 번역" onClick={onRetryFailed}>다시 번역</button>
+            {state.errors.map((error) => <p key={error.code}>{error.message}</p>)}
+            {state.errors.some((error) => error.retryable)
+              ? <button type="button" aria-label="실패한 문단 다시 번역" onClick={onRetryFailed}>다시 번역</button>
+              : <span>다시 번역할 수 없는 실패가 있습니다.</span>}
+          </div>
+        )}
+
+        {isRetryingFailedChunks && (
+          <div className="translation-failure" role="status">
+            <span>실패한 문단을 다시 번역하는 중입니다.</span>
+            {state.retryingErrors?.map((error) => <p key={error.code}>{error.message}</p>)}
           </div>
         )}
 
@@ -130,7 +141,7 @@ export default function ReaderView({
                 {settings.viewMode !== "translation" && <p className="original-copy">{paragraph.text}</p>}
                 {settings.viewMode !== "original" && (translation
                   ? <p>{translation}</p>
-                  : isPartialFailure
+                  : isPartialFailure || isRetryingFailedChunks
                     ? <p className="failed-paragraph"><strong>번역 실패</strong><span>이 문단을 다시 번역할 수 있습니다.</span></p>
                     : <span className="paragraph-placeholder" aria-label={`${paragraph.id} 번역 대기 중`}><i /><i /><i /></span>)}
               </div>

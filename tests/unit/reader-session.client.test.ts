@@ -265,6 +265,61 @@ describe("reader session controller", () => {
     expect(controller.getState().status).toBe("complete");
   });
 
+  it("keeps only unique safe public errors and retries only retryable partial failures", async () => {
+    const secret = "AIza-partial-failure-key";
+    const partial = progress("partial_failure", [{ id: "p1", text: "하나" }], ["chunk-2", "chunk-3"]);
+    const execute = vi.fn(async () => ({
+      ...result(partial),
+      errors: [
+        { chunkId: "chunk-2", code: "QUOTA_EXCEEDED" as const, message: `${secret} raw upstream body`, retryable: false },
+        { chunkId: "chunk-3", code: "QUOTA_EXCEEDED" as const, message: "duplicate", retryable: false },
+        { chunkId: "chunk-4", code: "TRANSLATION_BLOCKED" as const, message: "stack trace", retryable: true },
+      ],
+    }));
+    const { controller } = setup(execute);
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+
+    expect(controller.getState()).toMatchObject({
+      status: "partial_failure",
+      errors: [
+        { code: "QUOTA_EXCEEDED", message: "Gemini API 할당량이 소진되었습니다.", retryable: true },
+        { code: "TRANSLATION_BLOCKED", message: "안전 정책으로 번역할 수 없습니다.", retryable: false },
+      ],
+    });
+    expect(JSON.stringify(controller.getState())).not.toContain(secret);
+
+    await controller.retryFailedTranslation();
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenLastCalledWith(expect.objectContaining({
+      retryFailed: {
+        failedChunkIds: ["chunk-2", "chunk-3"],
+        successfulTranslations: [{ id: "p1", text: "하나" }],
+      },
+    }));
+  });
+
+  it("does not retry a partial failure when every public error is non-retryable", async () => {
+    const partial = progress("partial_failure", [{ id: "p1", text: "하나" }], ["chunk-2"]);
+    const execute = vi.fn(async () => ({
+      ...result(partial),
+      errors: [{
+        chunkId: "chunk-2",
+        code: "TRANSLATION_BLOCKED" as const,
+        message: "안전 정책으로 번역할 수 없습니다.",
+        retryable: false,
+      }],
+    }));
+    const { controller } = setup(execute);
+
+    await controller.openChapter("https://www.69shuba.com/txt/1/1");
+    await controller.retryFailedTranslation();
+
+    expect(execute).toHaveBeenCalledOnce();
+    expect(controller.getState()).toMatchObject({ status: "partial_failure" });
+  });
+
   it("separates source reload from cache-bypassed retranslation", async () => {
     const complete = progress("complete", [
       { id: "p1", text: "하나" },

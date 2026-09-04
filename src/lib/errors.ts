@@ -75,10 +75,14 @@ export class TranslationOutputError extends Error {
   }
 }
 
+export function publicErrorForCode(code: PublicErrorCode): PublicError {
+  return { code, ...PUBLIC_ERRORS[code] };
+}
+
 export function toPublicError(error: unknown): PublicError {
   const code =
     error instanceof SourceContractError || error instanceof TranslationOutputError
       ? error.code
       : "EXTRACTION_FAILED";
-  return { code, ...PUBLIC_ERRORS[code] };
+  return publicErrorForCode(code);
 }

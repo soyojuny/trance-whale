@@ -101,15 +101,52 @@ describe("ReaderView", () => {
     expect(screen.queryByLabelText("p2 번역 대기 중")).not.toBeInTheDocument();
   });
 
-  it("keeps successful text and exposes failed ranges with retry", () => {
+  it("keeps successful text, shows unique safe failure reasons, and exposes retry when eligible", () => {
     const onRetryFailed = vi.fn();
-    render(<ReaderView state={contentState("partial_failure")} settings={settings} onRetryFailed={onRetryFailed} />);
+    const state = contentState("partial_failure");
+    if (state.status !== "partial_failure") throw new Error("partial failure state expected");
+    state.errors = [
+      { code: "QUOTA_EXCEEDED", message: "Gemini API 할당량이 소진되었습니다.", retryable: true },
+      { code: "TRANSLATION_BLOCKED", message: "안전 정책으로 번역할 수 없습니다.", retryable: false },
+    ];
+    render(<ReaderView state={state} settings={settings} onRetryFailed={onRetryFailed} />);
 
     expect(screen.getByText("첫 번째 번역")).toBeInTheDocument();
     expect(screen.getByText("번역하지 못한 문단이 1개 있습니다.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Gemini API 할당량이 소진되었습니다.");
+    expect(screen.getByRole("alert")).toHaveTextContent("안전 정책으로 번역할 수 없습니다.");
     expect(screen.getByTestId("paragraph-p2")).toHaveTextContent("번역 실패");
     fireEvent.click(screen.getByRole("button", { name: "실패한 문단 다시 번역" }));
     expect(onRetryFailed).toHaveBeenCalledOnce();
+  });
+
+  it("does not expose a retry action or raw errors for non-retryable partial failures", () => {
+    const secret = "AIza-view-secret";
+    const state = contentState("partial_failure");
+    if (state.status !== "partial_failure") throw new Error("partial failure state expected");
+    state.errors = [{
+      code: "TRANSLATION_BLOCKED",
+      message: "안전 정책으로 번역할 수 없습니다.",
+      retryable: false,
+    }];
+    render(<ReaderView state={state} settings={settings} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("다시 번역할 수 없는 실패가 있습니다.");
+    expect(screen.queryByRole("button", { name: "실패한 문단 다시 번역" })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(secret);
+    expect(document.body.textContent).not.toContain("raw upstream body");
+  });
+
+  it("preserves completed paragraphs and announces a partial retry while it is running", () => {
+    const state = contentState("translating");
+    if (state.status !== "translating") throw new Error("translating state expected");
+    state.retryingFailedChunks = true;
+    render(<ReaderView state={state} settings={settings} />);
+
+    expect(screen.getByText("첫 번째 번역")).toBeInTheDocument();
+    expect(screen.getByTestId("paragraph-p2")).toHaveTextContent("번역 실패");
+    expect(screen.getByText("실패한 문단을 다시 번역하는 중입니다.")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3 문단")).toBeInTheDocument();
   });
 
   it("renders hostile source strings as text and applies bounded reader settings", () => {

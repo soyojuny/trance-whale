@@ -1,8 +1,10 @@
 import "client-only";
 
 import {
+  PublicErrorCodeSchema,
   PublicErrorSchema,
   SourceContractError,
+  publicErrorForCode,
   toPublicError,
   type PublicError,
 } from "../errors";
@@ -23,6 +25,8 @@ type SessionContent = {
   completedParagraphs: number;
   totalParagraphs: number;
   failedChunkIds: string[];
+  retryingFailedChunks?: boolean;
+  retryingErrors?: PublicError[];
 };
 
 export type ReaderSessionState =
@@ -32,7 +36,7 @@ export type ReaderSessionState =
   | ({ status: "checking_cache" } & SessionContent)
   | ({ status: "translating" } & SessionContent)
   | ({ status: "complete"; cache: CachedChapterTranslationResult["cache"] } & SessionContent)
-  | ({ status: "partial_failure"; errors: CachedChapterTranslationResult["errors"] } & SessionContent)
+  | ({ status: "partial_failure"; errors: PublicError[] } & SessionContent)
   | { status: "cancelled" }
   | { status: "failed"; error: PublicError };
 
@@ -42,6 +46,7 @@ export type ReaderSessionAction =
   | { type: "check_cache" }
   | { type: "translation_progress"; progress: TranslationProgress }
   | { type: "translation_finished"; result: CachedChapterTranslationResult }
+  | { type: "retry_failed_translation" }
   | { type: "cancel" }
   | { type: "fail"; error: PublicError };
 
@@ -49,6 +54,8 @@ const EMPTY_TRANSLATIONS = {
   translations: [] as TranslationParagraph[],
   completedParagraphs: 0,
   failedChunkIds: [] as string[],
+  retryingFailedChunks: false,
+  retryingErrors: [] as PublicError[],
 };
 
 function hasChapter(state: ReaderSessionState): state is ReaderSessionState & SessionContent {
@@ -77,7 +84,21 @@ function contentFromProgress(
     completedParagraphs: translations.length,
     totalParagraphs: state.chapter.paragraphs.length,
     failedChunkIds: progress.failedChunkIds,
+    retryingFailedChunks: state.retryingFailedChunks,
+    retryingErrors: state.retryingErrors,
   };
+}
+
+function safePartialErrors(errors: CachedChapterTranslationResult["errors"]): PublicError[] {
+  const unique = new Set<PublicError["code"]>();
+  const publicErrors: PublicError[] = [];
+  for (const error of errors) {
+    const code = PublicErrorCodeSchema.safeParse(error.code);
+    if (!code.success || unique.has(code.data)) continue;
+    unique.add(code.data);
+    publicErrors.push(publicErrorForCode(code.data));
+  }
+  return publicErrors;
 }
 
 export function readerSessionReducer(
@@ -110,7 +131,7 @@ export function readerSessionReducer(
         return { status: "complete", cache: "miss", ...content };
       }
       if (action.progress.status === "partial_failure") {
-        return { status: "partial_failure", errors: [], ...content };
+        return { status: "partial_failure", errors: [], ...content, retryingFailedChunks: false };
       }
       return { status: "translating", ...content };
     }
@@ -119,7 +140,7 @@ export function readerSessionReducer(
       const content = contentFromProgress(state, action.result.progress);
       if (action.result.progress.status === "cancelled") return { status: "cancelled" };
       if (action.result.progress.status === "partial_failure") {
-        return { status: "partial_failure", errors: action.result.errors, ...content };
+        return { status: "partial_failure", errors: safePartialErrors(action.result.errors), ...content, retryingFailedChunks: false };
       }
       if (action.result.progress.status === "complete") {
         return { status: "complete", cache: action.result.cache, ...content };
@@ -132,6 +153,10 @@ export function readerSessionReducer(
       }
       return { status: "translating", ...content };
     }
+    case "retry_failed_translation":
+      return state.status === "partial_failure"
+        ? { ...state, status: "translating", retryingFailedChunks: true, retryingErrors: state.errors }
+        : state;
     case "cancel":
       return { status: "cancelled" };
     case "fail":
@@ -214,7 +239,11 @@ export function createReaderSessionController(
     task: PreparedCachedChapterTranslation,
     apiKey: string,
     execution: ExecuteCachedChapterTranslationRequest,
+    retryingFailedChunks = false,
   ) => {
+    if (retryingFailedChunks && isCurrent(operation) && state.status === "partial_failure") {
+      dispatch({ type: "retry_failed_translation" });
+    }
     if (isCurrent(operation) && hasChapter(state)) {
       dispatch({
         type: "translation_progress",
@@ -356,7 +385,7 @@ export function createReaderSessionController(
       return;
     }
     if (!isCurrent(operation)) return;
-    await executeTranslation(operation, prepared, settings.apiKey, {});
+    await executeTranslation(operation, prepared, settings.apiKey, { forceRetranslate: false });
   };
 
   const rerunTranslation = async (
@@ -385,11 +414,11 @@ export function createReaderSessionController(
       }
     }
     const execution = retryFailed
-      ? { retryFailed }
+      ? { forceRetranslate: false as const, retryFailed }
       : reprepare
         ? { forceRetranslate: true as const }
-        : {};
-    await executeTranslation(operation, prepared, settings.apiKey, execution);
+        : { forceRetranslate: false as const };
+    await executeTranslation(operation, prepared, settings.apiKey, execution, Boolean(retryFailed));
   };
 
   return {
@@ -406,7 +435,7 @@ export function createReaderSessionController(
     },
     forceRetranslate: () => rerunTranslation(true),
     retryFailedTranslation: async () => {
-      if (state.status === "partial_failure") {
+      if (state.status === "partial_failure" && state.errors.some((error) => error.retryable)) {
         await rerunTranslation(false, {
           failedChunkIds: state.failedChunkIds,
           successfulTranslations: state.translations,
