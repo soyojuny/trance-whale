@@ -15,6 +15,9 @@ import { createSourceClient } from "../../services/source-client.client";
 import { createTranslationCache } from "../../services/translation-cache.client";
 import type { LastReadingPosition } from "../../types/storage";
 import ReaderView from "./reader-view";
+import Icon from "../ui/icon";
+import { TRANSLATION_MODELS, type TranslationMode } from "../../lib/translation/models";
+import { MAX_USER_PROMPT_LENGTH } from "../../lib/translation/prompt";
 
 const SCROLL_THROTTLE_MS = 150;
 
@@ -90,6 +93,13 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
   const [settings, setSettings] = useState(() => suppliedRuntime?.preferences.loadPreferences().reader);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [translationDraft, setTranslationDraft] = useState(() => suppliedRuntime?.preferences.loadPreferences().translation ?? {
+    apiKey: "",
+    translationMode: "fast" as TranslationMode,
+    userPrompt: "",
+  });
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [readerRevealKey, setReaderRevealKey] = useState(false);
   const desktopCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const mobileCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const catalogReturnFocusRef = useRef<HTMLElement>(null);
@@ -122,6 +132,7 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
     runtime.subscribeReader(setReaderState);
     runtime.subscribeCatalog(setCatalogState);
     setSettings(runtime.preferences.loadPreferences().reader);
+    setTranslationDraft(runtime.preferences.loadPreferences().translation);
   }, [runtime]);
 
   const savePosition = useCallback((service: ReaderNavigationRuntime | null, canonicalUrl: string | undefined, scrollPosition: number) => {
@@ -183,6 +194,7 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
 
   useEffect(() => {
     if (!settingsOpen) return;
+    setReaderRevealKey(false);
     settingsCloseRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -208,10 +220,16 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
 
   return (
     <main className="app-shell reader-page">
-      <button type="button" className="reader-home-button" onClick={() => push("/")} aria-label="홈으로 이동">홈</button>
+      <aside className="side-rail" aria-label="주 탐색">
+        <button type="button" className="brand-mark" onClick={() => push("/")} aria-label="Trance Whale 홈"><span>TW</span></button>
+        <nav>
+          <button type="button" className="rail-link" onClick={() => push("/")}><Icon name="home" /><span>홈</span></button>
+          <button type="button" className="rail-link" onClick={() => chapter?.navigation.catalog && openCatalog(chapter.navigation.catalog.url)}><Icon name="list" /><span>목차</span></button>
+          <button ref={settingsButtonRef} type="button" className="rail-link" onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>설정</span></button>
+        </nav>
+      </aside>
       <div className="reader-session-actions">
-        <button type="button" aria-label="현재 장 다시 불러오기" onClick={() => void runtime.readerSession.forceReload()}>다시 불러오기</button>
-        <button ref={settingsButtonRef} type="button" aria-label="읽기 및 번역 설정 열기" onClick={() => setSettingsOpen(true)}>설정</button>
+        <button type="button" aria-label="현재 장 다시 불러오기" onClick={() => void runtime.readerSession.forceReload()}>↻</button>
       </div>
       <ReaderView
         state={readerState}
@@ -230,8 +248,8 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
       {chapter && (
         <nav className="mobile-reader-tools is-visible" aria-label="모바일 독서 도구">
           <button type="button" disabled={!chapter.navigation.previous} aria-label={chapter.navigation.previous ? `이전 장: ${chapter.navigation.previous.label ?? "장 이동"}` : "이전 장 없음"} onClick={() => chapter.navigation.previous && navigateChapter(chapter.navigation.previous.url)}>←<small>이전 장</small></button>
-          <button ref={mobileCatalogButtonRef} type="button" disabled={!chapter.navigation.catalog} aria-label={chapter.navigation.catalog ? "목차 열기 (모바일)" : "목차 없음"} onClick={() => chapter.navigation.catalog && openCatalog(chapter.navigation.catalog.url, mobileCatalogButtonRef.current)}>☷<small>목차</small></button>
-          <button type="button" aria-label="홈으로 이동 (모바일)" onClick={() => push("/")}>⌂<small>홈</small></button>
+          <button ref={mobileCatalogButtonRef} type="button" disabled={!chapter.navigation.catalog} aria-label={chapter.navigation.catalog ? "목차 열기 (모바일)" : "목차 없음"} onClick={() => chapter.navigation.catalog && openCatalog(chapter.navigation.catalog.url, mobileCatalogButtonRef.current)}><Icon name="list" /><small>목차</small></button>
+          <button type="button" aria-label="홈으로 이동" onClick={() => push("/")}><Icon name="home" /><small>홈</small></button>
           <button type="button" disabled={!chapter.navigation.next} aria-label={chapter.navigation.next ? `다음 장: ${chapter.navigation.next.label ?? "장 이동"}` : "다음 장 없음"} onClick={() => chapter.navigation.next && navigateChapter(chapter.navigation.next.url)}>→<small>다음 장</small></button>
         </nav>
       )}
@@ -260,10 +278,36 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
               <button ref={settingsCloseRef} type="button" className="icon-button" aria-label="설정 닫기" onClick={() => {
                 setSettingsOpen(false);
                 requestAnimationFrame(() => settingsButtonRef.current?.focus());
-              }}>닫기</button>
+              }}><Icon name="x" /></button>
             </header>
             <div className="settings-body">
-              <p>저장된 번역 설정으로 현재 장을 다시 번역할 수 있습니다.</p>
+              <section>
+                <div className="setting-title"><strong>본문 글자 크기</strong><span>{settings.fontSize}px</span></div>
+                <input type="range" min="16" max="24" value={settings.fontSize} onChange={(event) => setSettings({ ...settings, fontSize: Number(event.target.value) })} />
+              </section>
+              <section className="prompt-setting">
+                <label htmlFor="reader-user-prompt">나만의 번역 지시</label>
+                <textarea id="reader-user-prompt" maxLength={MAX_USER_PROMPT_LENGTH} value={translationDraft.userPrompt} onChange={(event) => { setSettingsSaved(false); setTranslationDraft({ ...translationDraft, userPrompt: event.target.value }); }} placeholder="예: 인물 이름 표기와 말투를 일관되게 유지해 주세요." />
+                <p>기본 번역 원칙은 항상 별도로 적용됩니다. {translationDraft.userPrompt.length} / {MAX_USER_PROMPT_LENGTH}자</p>
+              </section>
+              <section>
+                <label htmlFor="reader-translation-model">번역 모델</label>
+                <select className="visually-hidden" id="reader-translation-model" aria-label="번역 모델" value={translationDraft.translationMode} onChange={(event) => { setSettingsSaved(false); setTranslationDraft({ ...translationDraft, translationMode: event.target.value as TranslationMode }); }}>
+                  {Object.values(TRANSLATION_MODELS).map((model) => <option key={model.mode} value={model.mode}>{model.label}{model.mode === "fast" ? " (추천)" : ""}</option>)}
+                </select>
+                {Object.values(TRANSLATION_MODELS).map((model) => <label key={model.mode} className={`radio-card ${translationDraft.translationMode === model.mode ? "selected" : ""}`}>
+                  <input type="radio" name="reader-translation-model-card" checked={translationDraft.translationMode === model.mode} onChange={() => { setSettingsSaved(false); setTranslationDraft({ ...translationDraft, translationMode: model.mode }); }} />
+                  <span><strong>{model.label}</strong><small>{model.mode === "fast" ? "속도와 대량 번역 우선" : "문체와 맥락 우선"}</small></span>
+                  {model.mode === "fast" && <b>추천</b>}
+                </label>)}
+              </section>
+              <section>
+                <label htmlFor="reader-api-key">Gemini API Key</label>
+                <div className="key-field"><input id="reader-api-key" type={readerRevealKey ? "text" : "password"} autoComplete="off" value={translationDraft.apiKey} onChange={(event) => { setSettingsSaved(false); setTranslationDraft({ ...translationDraft, apiKey: event.target.value }); }} /><button type="button" onClick={() => setReaderRevealKey((value) => !value)} aria-label={`API Key ${readerRevealKey ? "숨기기" : "표시"}`}>{readerRevealKey ? "숨기기" : "표시"}</button></div>
+                <p>Key는 브라우저에만 저장되고 앱 서버로 전송되지 않습니다.</p>
+              </section>
+              {settingsSaved && <p role="status">저장됨 · 다음 장부터 적용</p>}
+              <button type="button" className="save-button" onClick={() => { const current = runtime.preferences.loadPreferences(); runtime.preferences.savePreferences({ ...current, reader: settings, translation: translationDraft }); setSettingsSaved(true); }}>변경사항 저장</button>
               <button className="retranslate-button" type="button" aria-label="현재 장 다시 번역" onClick={() => {
                 setSettingsOpen(false);
                 void runtime.readerSession.forceRetranslate();

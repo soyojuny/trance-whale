@@ -12,6 +12,7 @@ import {
   DEFAULT_TRANSLATION_SETTINGS,
   type LastReadingPosition,
 } from "../types/storage";
+import Icon from "./ui/icon";
 
 type PreferencesPort = {
   loadPreferences(): Preferences;
@@ -209,8 +210,16 @@ export default function HomeSettingsFlow({
 
   return (
     <main className="app-shell">
+      <aside className="side-rail" aria-label="주 탐색">
+        <a className="brand-mark" href="#top" aria-label="Trance Whale 홈"><span>TW</span></a>
+        <nav>
+          <a className="rail-link is-active" href="#top"><Icon name="home" /><span>홈</span></a>
+          <button className="rail-link" type="button" onClick={openSheet}><Icon name="settings" /><span>설정</span></button>
+        </nav>
+        <span className="rail-version">Beta 0.1</span>
+      </aside>
       <div className="page-wrap" inert={open ? true : undefined}>
-        <header className="mobile-header"><strong>Trance Whale</strong></header>
+        <header className="mobile-header"><strong>Trance Whale</strong><button ref={openerRef} className="icon-button" type="button" onClick={openSheet} aria-label="설정 열기"><Icon name="settings" /></button></header>
         <section className="welcome" aria-labelledby="welcome-title">
           <p className="eyebrow">TRANCE WHALE</p>
           <h1 id="welcome-title">읽고 싶은 이야기를 가져오세요</h1>
@@ -218,19 +227,20 @@ export default function HomeSettingsFlow({
           <form className="url-form" onSubmit={submitUrl}>
             <label htmlFor="novel-url">웹소설 장 URL</label>
             <div className="url-control">
+              <span className="url-symbol"><Icon name="arrow" size={17} /></span>
               <input id="novel-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} aria-describedby="url-support url-error" />
               <button type="submit">번역해서 읽기</button>
             </div>
-            <span id="url-support" className="support-note">현재 69shuba.com의 공개 페이지를 지원해요.</span>
+            <span id="url-support" className="support-note"><Icon name="check" size={15} />현재 69shuba.com의 공개 페이지를 지원해요.</span>
             {urlError && <p id="url-error" role="alert">{urlError}</p>}
           </form>
           {lastPosition && (
             <button className="continue-card" type="button" aria-label="이어 읽기" onClick={() => navigate(readerHref(lastPosition.canonicalUrl))}>
-              <span><small>이어 읽기</small><strong>마지막으로 읽던 장</strong></span>
-              <span aria-hidden="true">→</span>
+              <span className="book-tile" aria-hidden="true"><Icon name="book" size={23} /></span>
+              <span className="continue-copy"><small>이어 읽기</small><strong>마지막으로 읽던 장</strong><span>저장된 위치에서 계속</span></span>
+              <Icon name="arrow" size={19} aria-hidden="true" />
             </button>
           )}
-          <button ref={openerRef} className="secondary-button" type="button" onClick={openSheet}>설정 열기</button>
         </section>
       </div>
 
@@ -239,31 +249,39 @@ export default function HomeSettingsFlow({
           <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
             <header>
               <div><span>SETTINGS</span><h2 id="settings-title">읽기 및 번역 설정</h2></div>
-              <button type="button" className="icon-button" onClick={closeSheet} aria-label="설정 닫기">닫기</button>
+              <button type="button" className="icon-button" onClick={closeSheet} aria-label="설정 닫기"><Icon name="x" /></button>
             </header>
             <div className="settings-body">
               <section>
-                <label htmlFor="font-size">본문 글자 크기</label>
+                <div className="setting-title"><strong>글자 크기</strong><span>{draft.reader.fontSize}px</span></div>
+                <label className="visually-hidden" htmlFor="font-size">본문 글자 크기</label>
                 <input ref={initialFocusRef} id="font-size" type="range" min="16" max="24" value={draft.reader.fontSize} onChange={(event) => setDraft({ ...draft, reader: { ...draft.reader, fontSize: Number(event.target.value) } })} />
-                <output htmlFor="font-size">{draft.reader.fontSize}px</output>
+                <div className="range-labels" aria-hidden="true"><span>가</span><span>가</span></div>
               </section>
-              <section>
+              <section className="prompt-setting">
+                <div className="setting-title"><strong>나만의 번역 지시</strong><span>{draft.translation.userPrompt.length} / {MAX_USER_PROMPT_LENGTH}</span></div>
+                <p className="prompt-intro">작품의 이름 표기, 말투, 문체처럼 번역에 반영할 내용을 적어주세요.</p>
                 <label htmlFor="user-prompt">나만의 번역 지시</label>
                 <textarea id="user-prompt" maxLength={MAX_USER_PROMPT_LENGTH} value={draft.translation.userPrompt} onChange={(event) => setDraft({ ...draft, translation: { ...draft.translation, userPrompt: event.target.value } })} placeholder="예: 인물 이름 표기와 말투를 일관되게 유지해 주세요." />
-                <p>기본 번역 원칙은 항상 별도로 적용됩니다. {draft.translation.userPrompt.length} / {MAX_USER_PROMPT_LENGTH}자</p>
+                <div className="base-prompt-note"><Icon name="check" size={15} /><span><strong>기본 번역 원칙은 항상 함께 적용돼요.</strong><small>문단 구조, 문체, 고유명사 일관성을 유지합니다.</small></span></div>
               </section>
               <section>
-                <label htmlFor="translation-model">번역 모델</label>
-                <select id="translation-model" value={draft.translation.translationMode} onChange={(event) => setDraft({ ...draft, translation: { ...draft.translation, translationMode: event.target.value as TranslationMode } })}>
+                <div className="setting-title"><strong>번역 모델</strong><span>저장 후 다음 번역부터 적용</span></div>
+                <select className="visually-hidden" aria-label="번역 모델" value={draft.translation.translationMode} onChange={(event) => setDraft({ ...draft, translation: { ...draft.translation, translationMode: event.target.value as TranslationMode } })}>
                   {Object.values(TRANSLATION_MODELS).map((model) => <option key={model.mode} value={model.mode}>{model.label}{model.mode === "fast" ? " (추천)" : ""}</option>)}
                 </select>
-                {Object.values(TRANSLATION_MODELS).map((model) => <p key={model.mode}><strong>{model.label}:</strong> {model.speedDescription} {model.qualityDescription} {model.costDescription}</p>)}
+                {Object.values(TRANSLATION_MODELS).map((model) => <label key={model.mode} className={`radio-card ${draft.translation.translationMode === model.mode ? "selected" : ""}`}>
+                  <input type="radio" name="translation-model-card" value={model.mode} checked={draft.translation.translationMode === model.mode} onChange={() => setDraft({ ...draft, translation: { ...draft.translation, translationMode: model.mode } })} />
+                  <span><strong>{model.label}</strong><small>{model.mode === "fast" ? "속도와 대량 번역 우선" : "문체와 맥락 우선"}</small></span>
+                  {model.mode === "fast" && <b>추천</b>}
+                </label>)}
               </section>
               <section>
-                <label htmlFor="api-key">Gemini API Key</label>
-                <div className="key-input-row">
+                <div className="setting-title"><strong>Gemini API Key</strong><span className="safe">● 기기에만 저장</span></div>
+                <label className="visually-hidden" htmlFor="api-key">Gemini API Key</label>
+                <div className="key-field">
                   <input id="api-key" type={revealKey ? "text" : "password"} autoComplete="off" value={draft.translation.apiKey} onChange={(event) => setDraft({ ...draft, translation: { ...draft.translation, apiKey: event.target.value } })} />
-                  <button type="button" onClick={() => setRevealKey((value) => !value)}>{revealKey ? "API Key 숨기기" : "API Key 표시"}</button>
+                  <button type="button" onClick={() => setRevealKey((value) => !value)} aria-label={`API Key ${revealKey ? "숨기기" : "표시"}`}><Icon name={revealKey ? "eyeOff" : "eye"} size={17} /><span>{revealKey ? "숨기기" : "표시"}</span></button>
                 </div>
                 {saved.translation.apiKey && (
                   !confirmKeyDeletion ? (
@@ -282,8 +300,8 @@ export default function HomeSettingsFlow({
               <div className="settings-actions">
                 <p aria-live="polite">{dirty ? "저장되지 않은 변경" : status === "saved" ? "저장됨 · 다음 장부터 적용" : "저장된 설정"}</p>
                 {message && <p role={message.includes("삭제했습니다") ? "status" : "alert"}>{message}</p>}
-                <button type="button" onClick={save} disabled={!dirty || status === "saving"}>{status === "saving" ? "검증 및 저장 중" : "변경사항 저장"}</button>
-                <button type="button" onClick={onRetranslate} disabled={dirty || status !== "saved" || !onRetranslate}>현재 장 다시 번역</button>
+                <button className="save-button" type="button" onClick={save} disabled={!dirty || status === "saving"}>{status === "saving" ? "검증 및 저장 중" : "변경사항 저장"}</button>
+                <button className="retranslate-button" type="button" onClick={onRetranslate} disabled={dirty || status !== "saved" || !onRetranslate}>현재 장 다시 번역 <Icon name="arrow" size={16} /></button>
                 {!confirmReset ? (
                   <button type="button" onClick={() => setConfirmReset(true)}>전체 데이터 삭제</button>
                 ) : (

@@ -6,6 +6,7 @@ import { publicErrorForCode } from "../../lib/errors";
 import type { ReaderSessionState } from "../../lib/reader/session.client";
 import type { NavigationTarget } from "../../types/source";
 import type { ReaderSettings, ViewMode } from "../../types/storage";
+import Icon from "../ui/icon";
 
 type ReaderViewProps = {
   state: ReaderSessionState;
@@ -95,7 +96,7 @@ export default function ReaderView({
           {chapter.chapterNumber && <span>제{chapter.chapterNumber}화</span>}
         </div>
         <div className="reader-actions">
-          <button ref={catalogButtonRef} type="button" disabled={!chapter.navigation.catalog} onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}>목차</button>
+          <button ref={catalogButtonRef} type="button" disabled={!chapter.navigation.catalog} aria-label="목차 열기 (상단)" onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}><Icon name="list" size={18} /><span>목차</span></button>
           <label>본문 글자 크기 <input type="range" min="16" max="24" value={fontSize} onChange={(event) => onSettingsChange?.({ ...settings, fontSize: Number(event.target.value) })} /></label>
           <label>본문 줄 간격 <input type="range" min="1.5" max="2.5" step="0.1" value={settings.lineHeight} onChange={(event) => onSettingsChange?.({ ...settings, lineHeight: Number(event.target.value) })} /></label>
         </div>
@@ -156,7 +157,7 @@ export default function ReaderView({
 
         <nav className="chapter-nav" aria-label="장 이동">
           <NavigationButton direction="previous" target={chapter.navigation.previous} onNavigate={onNavigateChapter} />
-          <button type="button" className="catalog-shortcut" disabled={!chapter.navigation.catalog} aria-label="목차 열기" onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}>☷<span>목차</span></button>
+          <button type="button" className="catalog-shortcut" disabled={!chapter.navigation.catalog} aria-label="목차 열기" onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}><Icon name="list" /><span>목차</span></button>
           <NavigationButton direction="next" target={chapter.navigation.next} onNavigate={onNavigateChapter} />
         </nav>
       </div>
