@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "translation-output-validation",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T11:28:28+0900",
+      "summary": "Gemini 원시 JSON 출력의 스키마와 문단 ID 완전성·유일성·순서를 검증하고 콘텐츠를 노출하지 않는 계약 오류로 분류하는 검증기를 구현했다.",
+      "completed_at": "2026-09-04T11:30:26+0900"
     },
     {
       "step": 3,

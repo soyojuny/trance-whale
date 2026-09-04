@@ -55,7 +55,30 @@ export class SourceContractError extends Error {
   }
 }
 
+export const TRANSLATION_OUTPUT_ERROR_REASONS = [
+  "MALFORMED_JSON",
+  "INVALID_SCHEMA",
+  "MISSING_ID",
+  "DUPLICATE_ID",
+  "UNEXPECTED_ID",
+  "OUT_OF_ORDER",
+] as const;
+
+export type TranslationOutputErrorReason = (typeof TRANSLATION_OUTPUT_ERROR_REASONS)[number];
+
+export class TranslationOutputError extends Error {
+  readonly code = "TRANSLATION_FAILED" as const;
+
+  constructor(readonly reason: TranslationOutputErrorReason) {
+    super("Gemini translation output failed contract validation");
+    this.name = "TranslationOutputError";
+  }
+}
+
 export function toPublicError(error: unknown): PublicError {
-  const code = error instanceof SourceContractError ? error.code : "EXTRACTION_FAILED";
+  const code =
+    error instanceof SourceContractError || error instanceof TranslationOutputError
+      ? error.code
+      : "EXTRACTION_FAILED";
   return { code, ...PUBLIC_ERRORS[code] };
 }
