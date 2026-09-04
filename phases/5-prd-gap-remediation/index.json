@@ -7,7 +7,8 @@
       "name": "offline-source-cache-storage",
       "status": "completed",
       "started_at": "2026-09-04T22:13:14+0900",
-      "summary": "IndexedDB v2 source-cache stores validated ChapterSource records by canonical URL with safe miss and unavailable results."
+      "summary": "IndexedDB v2 source-cache stores validated ChapterSource records by canonical URL with safe miss and unavailable results.",
+      "completed_at": "2026-09-04T22:19:25+0900"
     },
     {
       "step": 1,
