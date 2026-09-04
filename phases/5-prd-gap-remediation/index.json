@@ -13,8 +13,7 @@
     {
       "step": 1,
       "name": "offline-reader-recovery",
-      "status": "pending",
-      "started_at": "2026-09-04T22:19:25+0900"
+      "status": "pending"
     },
     {
       "step": 2,
