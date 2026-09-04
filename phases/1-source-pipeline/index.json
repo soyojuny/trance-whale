@@ -32,7 +32,7 @@
       "status": "completed",
       "started_at": "2026-09-04T10:16:55+0900",
       "summary": "정확한 hostname 레지스트리와 69shuba 장 어댑터를 구현하고 fixture 계약 테스트로 텍스트 격리, 탐색 URL, 안정 ID·해시와 짧은 본문 거부를 검증했다.",
-      "completed_at": "2026-09-04T10:21:58+0900"
+      "completed_at": "2026-09-04T10:22:37+0900"
     },
     {
       "step": 4,
