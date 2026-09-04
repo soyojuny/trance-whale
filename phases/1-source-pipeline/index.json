@@ -1,0 +1,45 @@
+{
+  "project": "Trance Whale",
+  "phase": "source-pipeline",
+  "steps": [
+    {
+      "step": 0,
+      "name": "source-domain-contracts",
+      "status": "error",
+      "started_at": "2026-09-04T09:59:15+0900",
+      "error_message": "[3회 시도 후 실패] Step did not update status",
+      "failed_at": "2026-09-04T09:59:15+0900"
+    },
+    {
+      "step": 1,
+      "name": "source-url-validation",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "safe-source-fetch",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "shuba69-chapter-extractor",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "chapter-source-route",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "shuba69-catalog-extractor",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "catalog-source-route",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-04T09:59:15+0900"
+}
