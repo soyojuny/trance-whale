@@ -4,13 +4,19 @@ import { createHash } from "node:crypto";
 
 import { load, type CheerioAPI } from "cheerio";
 
-import type { CatalogSource, ChapterSource, NavigationTarget } from "../../types/source";
+import type {
+  CatalogChapter,
+  CatalogSource,
+  ChapterSource,
+  NavigationTarget,
+} from "../../types/source";
 import { SourceContractError } from "../errors";
 import type { SiteExtractor } from "./extractor";
 
 const HOSTNAME = "www.69shuba.com";
 const MINIMUM_CONTENT_LENGTH = 100;
 const CHAPTER_PATH = /^\/txt\/(\d+)\/(\d+)(?:\.html)?\/?$/;
+const CATALOG_PATH = /^\/book\/(\d+)(?:\/(?:\d+\.html)?)?$/;
 const CHAPTER_NUMBER = /第\s*([零〇一二两三四五六七八九十百千万\d]+)\s*章/;
 
 const selectors = {
@@ -22,6 +28,11 @@ const selectors = {
   previous: ".page1 #prev, .page1 a:contains('上一章')",
   catalog: ".page1 #index, .page1 a:contains('目录')",
   next: ".page1 #next, .page1 a:contains('下一章')",
+  catalogTitle: ".bookinfo h1, .book-info h1, main > h1, body > h1, h1",
+  catalogEntries:
+    ".catalog-list a[href*='/txt/'], .chapter-list a[href*='/txt/'], #catalog a[href*='/txt/'], .catalog a[href*='/txt/']",
+  catalogNext:
+    ".catalog-pagination a.next, .catalog-pagination a:contains('下一页'), .page a.next, .page a:contains('下一页')",
 } as const;
 
 function cleanText(text: string): string {
@@ -162,6 +173,144 @@ function extractChapter(html: string, sourceUrl: URL): ChapterSource {
   };
 }
 
+type CatalogPage = {
+  catalog: CatalogSource;
+  nextUrl?: URL;
+};
+
+function catalogUrl(value: string, sourceUrl: URL, bookId: string): URL | undefined {
+  let url: URL;
+  try {
+    url = normalizeUrl(new URL(value, sourceUrl));
+  } catch {
+    return undefined;
+  }
+
+  const pathMatch = url.pathname.match(CHAPTER_PATH);
+  if (
+    url.protocol !== "https:" ||
+    url.hostname !== HOSTNAME ||
+    url.port !== "" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    pathMatch?.[1] !== bookId
+  ) {
+    return undefined;
+  }
+
+  return url;
+}
+
+function extractCatalogPage(html: string, sourceUrl: URL): CatalogPage {
+  const normalizedSourceUrl = normalizeUrl(sourceUrl);
+  const catalogPathMatch = normalizedSourceUrl.pathname.match(CATALOG_PATH);
+  const bookId = catalogPathMatch?.[1];
+  if (
+    !bookId ||
+    normalizedSourceUrl.protocol !== "https:" ||
+    normalizedSourceUrl.hostname !== HOSTNAME
+  ) {
+    throw new SourceContractError("EXTRACTION_FAILED", "URL does not match 69shuba catalog format");
+  }
+
+  const $ = load(html);
+  $("script, style, iframe, .contentadv, .ad, .adsbygoogle").remove();
+  const bookTitle = cleanText($(selectors.catalogTitle).first().text());
+  if (!bookTitle) {
+    throw new SourceContractError("EXTRACTION_FAILED", "Catalog title is missing");
+  }
+
+  const chapters: CatalogChapter[] = [];
+  $(selectors.catalogEntries).each((_, element) => {
+    const href = $(element).attr("href");
+    const url = href ? catalogUrl(href, sourceUrl, bookId) : undefined;
+    const pathMatch = url?.pathname.match(CHAPTER_PATH);
+    const title = cleanText($(element).text());
+    if (!url || !pathMatch || !title) return;
+
+    const numberMatch = title.match(CHAPTER_NUMBER);
+    const number = numberMatch ? parseChapterNumber(numberMatch[1]) : undefined;
+    chapters.push({
+      id: `chapter-${pathMatch[2]}`,
+      url: url.href,
+      title,
+      ...(number ? { number } : {}),
+      sourceIndex: chapters.length,
+    });
+  });
+
+  if (chapters.length === 0) {
+    throw new SourceContractError("EXTRACTION_FAILED", "Catalog has no chapters");
+  }
+
+  const nextHref = $(selectors.catalogNext).first().attr("href");
+  let nextUrl: URL | undefined;
+  if (nextHref) {
+    try {
+      const candidate = normalizeUrl(new URL(nextHref, sourceUrl));
+      const nextPathMatch = candidate.pathname.match(CATALOG_PATH);
+      if (
+        candidate.protocol === "https:" &&
+        candidate.hostname === HOSTNAME &&
+        candidate.port === "" &&
+        candidate.username === "" &&
+        candidate.password === "" &&
+        nextPathMatch?.[1] === bookId
+      ) {
+        nextUrl = candidate;
+      }
+    } catch {
+      // Ignore malformed pagination links from source HTML.
+    }
+  }
+
+  return {
+    catalog: {
+      kind: "catalog",
+      sourceUrl: sourceUrl.href,
+      canonicalUrl: normalizedSourceUrl.href,
+      siteId: shuba69Extractor.id,
+      bookId,
+      bookTitle,
+      chapters,
+      fetchedAt: new Date().toISOString(),
+    },
+    nextUrl,
+  };
+}
+
+export async function collectShuba69Catalog(
+  initialHtml: string,
+  sourceUrl: URL,
+  loadPage: (url: URL) => Promise<string>,
+  maxPages: number,
+): Promise<CatalogSource> {
+  if (!Number.isInteger(maxPages) || maxPages < 1) {
+    throw new RangeError("maxPages must be a positive integer");
+  }
+
+  const firstPage = extractCatalogPage(initialHtml, sourceUrl);
+  const chapters: CatalogChapter[] = [];
+  const seenChapterUrls = new Set<string>();
+  const visitedPages = new Set<string>([normalizeUrl(sourceUrl).href]);
+  let page = firstPage;
+
+  for (let pageCount = 1; pageCount <= maxPages; pageCount += 1) {
+    for (const chapter of page.catalog.chapters) {
+      if (seenChapterUrls.has(chapter.url)) continue;
+      seenChapterUrls.add(chapter.url);
+      chapters.push({ ...chapter, sourceIndex: chapters.length });
+    }
+
+    if (pageCount === maxPages || !page.nextUrl || visitedPages.has(page.nextUrl.href)) break;
+    visitedPages.add(page.nextUrl.href);
+    const nextHtml = await loadPage(page.nextUrl);
+    page = extractCatalogPage(nextHtml, page.nextUrl);
+  }
+
+  return { ...firstPage.catalog, chapters };
+}
+
 export const shuba69Extractor: SiteExtractor = {
   id: "69shuba",
   hosts: [HOSTNAME],
@@ -170,7 +319,7 @@ export const shuba69Extractor: SiteExtractor = {
   },
   normalizeUrl,
   extractChapter,
-  extractCatalog(): CatalogSource {
-    throw new SourceContractError("EXTRACTION_FAILED", "Catalog extraction is not implemented");
+  extractCatalog(html, sourceUrl): CatalogSource {
+    return extractCatalogPage(html, sourceUrl).catalog;
   },
 };

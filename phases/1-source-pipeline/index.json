@@ -45,7 +45,10 @@
     {
       "step": 5,
       "name": "shuba69-catalog-extractor",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T10:26:31+0900",
+      "summary": "69shuba 목차 fixture 계약과 단일 페이지 추출, 정규화 URL 중복 제거, cycle·최대 페이지 제한을 갖춘 주입형 병합 로직을 구현했다.",
+      "completed_at": "2026-09-04T10:28:59+0900"
     },
     {
       "step": 6,
