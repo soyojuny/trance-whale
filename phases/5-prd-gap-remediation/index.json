@@ -61,9 +61,10 @@
     {
       "step": 7,
       "name": "offline-e2e-validation",
-      "status": "blocked",
-      "started_at": "2026-09-04T23:30:56+0900",
-      "blocked_reason": "Playwright Chromium cannot launch because libasound.so.2 is missing; E2E assertions were not skipped or relaxed."
+      "status": "completed",
+      "started_at": "2026-09-04T23:38:12+0900",
+      "summary": "Production Chromium E2E verifies cached offline reload without source or Gemini requests, unknown offline chapters show OFFLINE, and failed retries send only failed chunks.",
+      "completed_at": "2026-09-04T23:42:00+0900"
     }
   ],
   "created_at": "2026-09-04T22:13:14+0900"
