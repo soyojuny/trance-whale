@@ -48,7 +48,7 @@
       "status": "completed",
       "summary": "App Router 내부 장·목차 이동과 세션 전환, canonical URL별 throttle 위치 저장·복원을 통합했다.",
       "started_at": "2026-09-04T16:42:05+0900",
-      "completed_at": "2026-09-04T16:49:00+0900"
+      "completed_at": "2026-09-04T16:49:23+0900"
     },
     {
       "step": 6,
