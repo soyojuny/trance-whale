@@ -56,12 +56,13 @@
       "status": "completed",
       "started_at": "2026-09-04T23:04:22+0900",
       "summary": "Added traceable PRD validation evidence, a 10-chapter manual quality rubric, and concrete ADRs for source caching and selective retry.",
-      "completed_at": "2026-09-04T23:09:40+0900"
+      "completed_at": "2026-09-04T23:10:28+0900"
     },
     {
       "step": 7,
       "name": "offline-e2e-validation",
-      "status": "pending"
+      "status": "pending",
+      "started_at": "2026-09-04T23:09:40+0900"
     }
   ],
   "created_at": "2026-09-04T22:13:14+0900"
