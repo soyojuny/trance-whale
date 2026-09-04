@@ -22,13 +22,16 @@ type PrepareCachedChapterTranslationRequest = {
   userPrompt: string;
 };
 
-type ExecuteCachedChapterTranslationRequest = {
+type ExecuteCachedChapterTranslationCommon = {
   apiKey?: string;
   signal?: AbortSignal;
-  forceRetranslate?: boolean;
-  retryFailed?: FailedChunkRetry;
   onProgress?: (progress: TranslationProgress) => void;
 };
+
+export type ExecuteCachedChapterTranslationRequest = ExecuteCachedChapterTranslationCommon & (
+  | { forceRetranslate: true; retryFailed?: never }
+  | { forceRetranslate?: false; retryFailed?: FailedChunkRetry }
+);
 
 export type TranslationPersistenceResult =
   | { status: "not_attempted" }

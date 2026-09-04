@@ -8,6 +8,7 @@ import {
 } from "../errors";
 import {
   type CachedChapterTranslationResult,
+  type ExecuteCachedChapterTranslationRequest,
   type PreparedCachedChapterTranslation,
 } from "../translation/cached-pipeline.client";
 import type { SourceClient } from "../../services/source-client.client";
@@ -212,8 +213,7 @@ export function createReaderSessionController(
     operation: number,
     task: PreparedCachedChapterTranslation,
     apiKey: string,
-    forceRetranslate: boolean,
-    retryFailed?: { failedChunkIds: readonly string[]; successfulTranslations: TranslationProgress["translations"] },
+    execution: ExecuteCachedChapterTranslationRequest,
   ) => {
     if (isCurrent(operation) && hasChapter(state)) {
       dispatch({
@@ -231,8 +231,7 @@ export function createReaderSessionController(
       const translationResult = await task.execute({
         apiKey,
         signal: activeController?.signal,
-        forceRetranslate,
-        retryFailed,
+        ...execution,
         onProgress: (progress) => {
           if (isCurrent(operation) && progress.status === "translating") {
             dispatch({ type: "translation_progress", progress });
@@ -357,7 +356,7 @@ export function createReaderSessionController(
       return;
     }
     if (!isCurrent(operation)) return;
-    await executeTranslation(operation, prepared, settings.apiKey, false);
+    await executeTranslation(operation, prepared, settings.apiKey, {});
   };
 
   const rerunTranslation = async (
@@ -385,7 +384,12 @@ export function createReaderSessionController(
         return;
       }
     }
-    await executeTranslation(operation, prepared, settings.apiKey, reprepare, retryFailed);
+    const execution = retryFailed
+      ? { retryFailed }
+      : reprepare
+        ? { forceRetranslate: true as const }
+        : {};
+    await executeTranslation(operation, prepared, settings.apiKey, execution);
   };
 
   return {
