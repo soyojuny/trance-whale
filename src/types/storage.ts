@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { DEFAULT_TRANSLATION_MODE, TranslationModeSchema } from "../lib/translation/models";
 import { UserPromptSchema } from "../lib/translation/prompt";
-import { CatalogSourceSchema } from "./source";
+import { CatalogSourceSchema, ChapterSourceSchema } from "./source";
 import { TranslationParagraphSchema } from "./translation";
 
 const httpUrlSchema = z
@@ -83,6 +83,23 @@ export const CatalogCacheRecordSchema = z
   })
   .strict();
 
+export const SourceCacheRecordSchema = z
+  .object({
+    canonicalUrl: httpUrlSchema,
+    createdAt: timestampSchema,
+    chapter: ChapterSourceSchema,
+  })
+  .strict()
+  .superRefine((record, context) => {
+    if (record.canonicalUrl !== record.chapter.canonicalUrl) {
+      context.addIssue({
+        code: "custom",
+        message: "Source cache key must match the chapter canonical URL",
+        path: ["canonicalUrl"],
+      });
+    }
+  });
+
 export const DEFAULT_TRANSLATION_SETTINGS = {
   apiKey: "",
   userPrompt: "",
@@ -101,3 +118,4 @@ export type ReaderSettings = z.infer<typeof ReaderSettingsSchema>;
 export type LastReadingPosition = z.infer<typeof LastReadingPositionSchema>;
 export type TranslationCacheRecord = z.infer<typeof TranslationCacheRecordSchema>;
 export type CatalogCacheRecord = z.infer<typeof CatalogCacheRecordSchema>;
+export type SourceCacheRecord = z.infer<typeof SourceCacheRecordSchema>;

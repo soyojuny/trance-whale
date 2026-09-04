@@ -1,0 +1,49 @@
+{
+  "project": "Trance Whale",
+  "phase": "prd-gap-remediation",
+  "steps": [
+    {
+      "step": 0,
+      "name": "offline-source-cache-storage",
+      "status": "completed",
+      "started_at": "2026-09-04T22:13:14+0900",
+      "summary": "IndexedDB v2 source-cache stores validated ChapterSource records by canonical URL with safe miss and unavailable results."
+    },
+    {
+      "step": 1,
+      "name": "offline-reader-recovery",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "selective-failed-chunk-retry",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "partial-failure-feedback",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "api-key-deletion",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "http-url-normalization",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "prd-validation-evidence",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "offline-e2e-validation",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-04T22:13:14+0900"
+}

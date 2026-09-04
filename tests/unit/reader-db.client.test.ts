@@ -65,7 +65,7 @@ class FakeTransaction {
 class FakeDatabase {
   version = 0;
   readonly stores = new Map<string, { keyPath: string; indexes: string[] }>();
-  readonly values = new Map<IDBValidKey, unknown>();
+  readonly valuesByStore = new Map<string, Map<IDBValidKey, unknown>>();
   lastTransaction: FakeTransaction | null = null;
   objectStoreNames = {
     contains: (name: string) => this.stores.has(name),
@@ -79,8 +79,14 @@ class FakeDatabase {
     } as unknown as IDBObjectStore;
   }
 
-  transaction() {
-    this.lastTransaction = new FakeTransaction(this.values);
+  valuesFor(storeName: string): Map<IDBValidKey, unknown> {
+    const values = this.valuesByStore.get(storeName) ?? new Map<IDBValidKey, unknown>();
+    this.valuesByStore.set(storeName, values);
+    return values;
+  }
+
+  transaction(storeName: string) {
+    this.lastTransaction = new FakeTransaction(this.valuesFor(storeName));
     return this.lastTransaction as unknown as IDBTransaction;
   }
 
@@ -139,8 +145,46 @@ describe("reader database adapter", () => {
         indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
       }],
       [READER_DB_SCHEMA.stores.catalogs.name, { keyPath: "canonicalUrl", indexes: [] }],
+      [READER_DB_SCHEMA.stores.sources.name, { keyPath: "canonicalUrl", indexes: [] }],
     ]);
     second.close();
+  });
+
+  it("upgrades a version-one database without losing translation or catalog records", async () => {
+    const factory = new FakeFactory();
+    const translation = { cacheKey: "translation-key", accessedAt: "2026-09-04T01:00:00.000Z" };
+    const catalog = { canonicalUrl: "https://www.69shuba.com/book/48273/", createdAt: "2026-09-04T01:00:00.000Z" };
+
+    factory.database.version = 1;
+    factory.database.stores.set(READER_DB_SCHEMA.stores.translations.name, {
+      keyPath: "cacheKey",
+      indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.catalogs.name, {
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
+    factory.database.valuesFor(READER_DB_SCHEMA.stores.translations.name)
+      .set(translation.cacheKey, translation);
+    factory.database.valuesFor(READER_DB_SCHEMA.stores.catalogs.name)
+      .set(catalog.canonicalUrl, catalog);
+
+    const database = await openReaderDatabase(factory);
+
+    await expect(database.run(
+      READER_DB_SCHEMA.stores.translations.name,
+      "readonly",
+      (store) => store.get(translation.cacheKey),
+    )).resolves.toEqual(translation);
+    await expect(database.run(
+      READER_DB_SCHEMA.stores.catalogs.name,
+      "readonly",
+      (store) => store.get(catalog.canonicalUrl),
+    )).resolves.toEqual(catalog);
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.sources.name)).toEqual({
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
   });
 
   it("resolves readonly and readwrite work only after transaction completion", async () => {
@@ -159,16 +203,16 @@ describe("reader database adapter", () => {
     const factory = new FakeFactory();
     const database = await openReaderDatabase(factory);
 
-    factory.database.transaction = function transaction() {
-      this.lastTransaction = new FakeTransaction(this.values);
+    factory.database.transaction = function transaction(storeName: string) {
+      this.lastTransaction = new FakeTransaction(this.valuesFor(storeName));
       this.lastTransaction.requestError = new DOMException("private record", "DataError");
       return this.lastTransaction as unknown as IDBTransaction;
     };
     await expect(database.run(READER_DB_SCHEMA.stores.translations.name, "readonly", (store) => store.get("key")))
       .rejects.toMatchObject({ kind: "REQUEST_FAILED", message: "IndexedDB operation failed" });
 
-    factory.database.transaction = function transaction() {
-      this.lastTransaction = new FakeTransaction(this.values);
+    factory.database.transaction = function transaction(storeName: string) {
+      this.lastTransaction = new FakeTransaction(this.valuesFor(storeName));
       this.lastTransaction.abortOnUse = true;
       return this.lastTransaction as unknown as IDBTransaction;
     };

@@ -2,7 +2,7 @@ import "client-only";
 
 export const READER_DB_SCHEMA = {
   name: "trance-whale-reader",
-  version: 1,
+  version: 2,
   stores: {
     translations: {
       name: "translation-cache",
@@ -11,6 +11,10 @@ export const READER_DB_SCHEMA = {
     },
     catalogs: {
       name: "catalog-cache",
+      keyPath: "canonicalUrl",
+    },
+    sources: {
+      name: "source-cache",
       keyPath: "canonicalUrl",
     },
   },
@@ -124,6 +128,11 @@ function upgradeDatabase(database: IDBDatabase): void {
   const catalogs = READER_DB_SCHEMA.stores.catalogs;
   if (!database.objectStoreNames.contains(catalogs.name)) {
     database.createObjectStore(catalogs.name, { keyPath: catalogs.keyPath });
+  }
+
+  const sources = READER_DB_SCHEMA.stores.sources;
+  if (!database.objectStoreNames.contains(sources.name)) {
+    database.createObjectStore(sources.name, { keyPath: sources.keyPath });
   }
 }
 

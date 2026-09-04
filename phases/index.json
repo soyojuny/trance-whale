@@ -19,6 +19,10 @@
       "dir": "4-reader-pwa-integration",
       "status": "completed",
       "completed_at": "2026-09-04T17:12:45+0900"
+    },
+    {
+      "dir": "5-prd-gap-remediation",
+      "status": "pending"
     }
   ]
 }
