@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "paragraph-chunking",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T11:25:51+0900",
+      "summary": "문단 순서와 ID를 보존하며 문자 예산 경계에서 결정적으로 분할하는 순수 분할기를 구현했다.",
+      "completed_at": "2026-09-04T11:27:28+0900"
     },
     {
       "step": 2,
