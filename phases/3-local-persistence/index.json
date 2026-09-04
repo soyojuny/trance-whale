@@ -53,7 +53,10 @@
     {
       "step": 6,
       "name": "cached-translation-pipeline",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-09-04T15:17:08+0900",
+      "completed_at": "2026-09-04T15:20:55+0900",
+      "summary": "기존 클라이언트 번역 파이프라인과 IndexedDB 캐시를 조합해 안전한 hit, miss, 저장 실패와 강제 재번역 흐름을 구현했다."
     }
   ],
   "created_at": "2026-09-04T14:56:53+0900"
