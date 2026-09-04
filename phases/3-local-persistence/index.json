@@ -39,7 +39,7 @@
       "name": "catalog-cache",
       "status": "completed",
       "started_at": "2026-09-04T15:10:43+0900",
-      "completed_at": "2026-09-04T15:12:49+0900",
+      "completed_at": "2026-09-04T15:13:40+0900",
       "summary": "24시간 fresh/stale 판정과 접근 시각 갱신, 대용량 순서 보존 및 안전한 전체 삭제를 제공하는 IndexedDB 목차 캐시를 구현했다."
     },
     {
