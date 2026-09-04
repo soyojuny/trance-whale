@@ -1,0 +1,45 @@
+{
+  "project": "Trance Whale",
+  "phase": "client-translation",
+  "steps": [
+    {
+      "step": 0,
+      "name": "translation-contracts-and-models",
+      "status": "completed",
+      "started_at": "2026-09-04T11:22:38+0900",
+      "summary": "Zod 기반 번역 요청·출력·묶음·진행 계약과 2종 모델 카탈로그, 버전 고정 기본 프롬프트 조합기를 구현했다.",
+      "completed_at": "2026-09-04T11:25:00+0900"
+    },
+    {
+      "step": 1,
+      "name": "paragraph-chunking",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "translation-output-validation",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "translation-cache-key",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "gemini-client",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "translation-orchestrator",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "translation-pipeline-integration",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-09-04T11:22:38+0900"
+}

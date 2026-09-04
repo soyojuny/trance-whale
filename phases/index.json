@@ -4,6 +4,10 @@
       "dir": "1-source-pipeline",
       "status": "completed",
       "completed_at": "2026-09-04T10:33:44+0900"
+    },
+    {
+      "dir": "2-client-translation",
+      "status": "pending"
     }
   ]
 }
