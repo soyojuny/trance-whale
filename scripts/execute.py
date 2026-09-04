@@ -238,7 +238,6 @@ class StepExecutor:
         result = subprocess.run(
             [
                 "codex", "exec",
-                "--sandbox", "workspace-write",
                 "--approve-for-me",
                 "--json",
                 "-",

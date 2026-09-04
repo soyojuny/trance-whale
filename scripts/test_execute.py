@@ -434,9 +434,8 @@ class TestInvokeCodex:
 
         cmd = mock_run.call_args[0][0]
         assert cmd[:2] == ["codex", "exec"]
-        assert "--sandbox" in cmd
-        assert "workspace-write" in cmd
         assert "--approve-for-me" in cmd
+        assert "--sandbox" not in cmd
         assert "--json" in cmd
         assert cmd[-1] == "-"
         prompt = mock_run.call_args.kwargs["input"]
