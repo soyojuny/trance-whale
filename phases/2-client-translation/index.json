@@ -53,10 +53,10 @@
     {
       "step": 6,
       "name": "translation-pipeline-integration",
-      "status": "error",
-      "started_at": "2026-09-04T11:39:40+0900",
-      "error_message": "[3회 시도 후 실패] Step did not update status",
-      "failed_at": "2026-09-04T11:41:19+0900"
+      "status": "completed",
+      "started_at": "2026-09-04T14:12:54+0900",
+      "summary": "ChapterSource와 저장된 번역 설정을 캐시 키·분할·Gemini 검증·재시도 오케스트레이션에 연결하는 클라이언트 facade를 구현했다.",
+      "completed_at": "2026-09-04T14:15:30+0900"
     }
   ],
   "created_at": "2026-09-04T11:22:38+0900"

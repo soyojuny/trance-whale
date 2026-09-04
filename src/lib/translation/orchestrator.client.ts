@@ -13,7 +13,7 @@ const DEFAULT_CONCURRENCY = 2;
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_BASE_DELAY_MS = 250;
 
-type Translate = (request: {
+export type Translate = (request: {
   apiKey: string;
   modelId: string;
   userPrompt: string;
@@ -31,7 +31,7 @@ type OrchestratorRequest = {
   onProgress?: (progress: TranslationProgress) => void;
 };
 
-type OrchestratorDependencies = {
+export type OrchestratorDependencies = {
   translate?: Translate;
   sleep?: (milliseconds: number) => Promise<void>;
   jitter?: () => number;

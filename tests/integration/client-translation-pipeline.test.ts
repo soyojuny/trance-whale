@@ -42,7 +42,7 @@ describe("client translation pipeline", () => {
     );
     const task = await prepareChapterTranslation(
       { chapter, mode: "fast", userPrompt: "이름은 음역한다." },
-      { translate, characterBudget: 1, concurrency: 1, sleep: vi.fn(), jitter: () => 0 },
+      { translate, characterBudget: 1, concurrency: 1, sleep: vi.fn(async () => {}), jitter: () => 0 },
     );
 
     const result = await task.execute({
@@ -75,7 +75,7 @@ describe("client translation pipeline", () => {
     });
     const task = await prepareChapterTranslation(
       { chapter, mode: "fast", userPrompt: "" },
-      { translate, characterBudget: 1, concurrency: 1, sleep: vi.fn(), jitter: () => 0 },
+      { translate, characterBudget: 1, concurrency: 1, sleep: vi.fn(async () => {}), jitter: () => 0 },
     );
 
     const result = await task.execute({ apiKey: "test-key" });
@@ -91,7 +91,7 @@ describe("client translation pipeline", () => {
       {
         characterBudget: 1,
         concurrency: 1,
-        sleep: vi.fn(),
+        sleep: vi.fn(async () => {}),
         jitter: () => 0,
         translate: vi.fn(async ({ chunk }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] } }) => {
           if (chunk.chunkId === "chunk-1") throw new GeminiClientError("TRANSLATION_BLOCKED", false);
@@ -113,7 +113,7 @@ describe("client translation pipeline", () => {
       {
         characterBudget: 1,
         concurrency: 1,
-        sleep: vi.fn(),
+        sleep: vi.fn(async () => {}),
         jitter: () => 0,
         translate: vi.fn(async ({ chunk }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] } }) => {
           if (chunk.chunkId === "chunk-0") return translated(chunk);
@@ -136,7 +136,7 @@ describe("client translation pipeline", () => {
     const translate = vi.fn().mockRejectedValue(new GeminiClientError(code, false));
     const task = await prepareChapterTranslation(
       { chapter, mode: "quality", userPrompt: "" },
-      { translate, concurrency: 1, sleep: vi.fn(), jitter: () => 0 },
+      { translate, concurrency: 1, sleep: vi.fn(async () => {}), jitter: () => 0 },
     );
 
     const result = await task.execute({ apiKey: "test-key" });
