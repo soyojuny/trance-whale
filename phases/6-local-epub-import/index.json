@@ -23,7 +23,7 @@
       "status": "completed",
       "started_at": "2026-09-05T21:38:09+0900",
       "summary": "홈 EPUB 선택·보조 URL disclosure와 local book/chapter reader navigation을 연결하고, 로컬 목차는 cache만 사용하도록 유지했다.",
-      "completed_at": "2026-09-05T21:46:00+0900"
+      "completed_at": "2026-09-05T21:47:39+0900"
     },
     {
       "step": 3,
