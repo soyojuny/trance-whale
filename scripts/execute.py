@@ -10,6 +10,7 @@ import argparse
 import contextlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -84,9 +85,8 @@ class StepExecutor:
         self._print_header()
         self._check_blockers()
         self._checkout_branch()
-        guardrails = self._load_guardrails()
         self._ensure_created_at()
-        self._execute_all_steps(guardrails)
+        self._execute_all_steps()
         self._finalize()
 
     # --- timestamps ---
@@ -174,15 +174,29 @@ class StepExecutor:
 
     # --- guardrails & context ---
 
-    def _load_guardrails(self) -> str:
+    def _load_guardrails(self, step_file: Path) -> str:
+        """Load global rules and only the documents explicitly required by a step."""
         sections = []
         agents_md = ROOT / "AGENTS.md"
         if agents_md.exists():
             sections.append(f"## 프로젝트 규칙 (AGENTS.md)\n\n{agents_md.read_text(encoding='utf-8')}")
+
         docs_dir = ROOT / "docs"
-        if docs_dir.is_dir():
-            for doc in sorted(docs_dir.glob("*.md")):
-                sections.append(f"## {doc.stem}\n\n{doc.read_text(encoding='utf-8')}")
+        if not docs_dir.is_dir():
+            return "\n\n---\n\n".join(sections) if sections else ""
+
+        step_text = step_file.read_text(encoding="utf-8")
+        referenced_docs = re.findall(r"`(docs/[^`]+?\.md)`", step_text)
+        seen = set()
+        docs_root = docs_dir.resolve()
+        for relative_doc in referenced_docs:
+            if relative_doc in seen:
+                continue
+            seen.add(relative_doc)
+            doc = (ROOT / relative_doc).resolve()
+            if docs_root not in doc.parents or not doc.is_file():
+                continue
+            sections.append(f"## {relative_doc}\n\n{doc.read_text(encoding='utf-8')}")
         return "\n\n---\n\n".join(sections) if sections else ""
 
     @staticmethod
@@ -299,9 +313,11 @@ class StepExecutor:
 
     # --- 실행 루프 ---
 
-    def _execute_single_step(self, step: dict, guardrails: str) -> bool:
+    def _execute_single_step(self, step: dict) -> bool:
         """단일 step 실행 (재시도 포함). 완료되면 True, 실패/차단이면 False."""
         step_num, step_name = step["step"], step["name"]
+        step_file = self._phase_dir / f"step{step_num}.md"
+        guardrails = self._load_guardrails(step_file)
         done = sum(1 for s in self._read_json(self._index_file)["steps"] if s["status"] == "completed")
         prev_error = None
 
@@ -370,7 +386,7 @@ class StepExecutor:
 
         return False  # unreachable
 
-    def _execute_all_steps(self, guardrails: str):
+    def _execute_all_steps(self):
         while True:
             index = self._read_json(self._index_file)
             pending = next((s for s in index["steps"] if s["status"] == "pending"), None)
@@ -385,7 +401,7 @@ class StepExecutor:
                     self._write_json(self._index_file, index)
                     break
 
-            self._execute_single_step(pending, guardrails)
+            self._execute_single_step(pending)
 
     def _finalize(self):
         index = self._read_json(self._index_file)

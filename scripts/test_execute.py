@@ -55,7 +55,12 @@ def phase_dir(tmp_project):
         ],
     }
     (d / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False))
-    (d / "step2.md").write_text("# Step 2: UI\n\nUI를 구현하세요.")
+    (d / "step2.md").write_text(
+        "# Step 2: UI\n\n"
+        "## 읽어야 할 파일\n\n"
+        "- `docs/arch.md`\n\n"
+        "## 작업\n\nUI를 구현하세요."
+    )
 
     return d
 
@@ -146,38 +151,41 @@ class TestJsonHelpers:
 # ---------------------------------------------------------------------------
 
 class TestLoadGuardrails:
-    def test_loads_agents_md_and_docs(self, executor, tmp_project):
+    def test_loads_agents_md_and_only_documents_named_by_step(self, executor, tmp_project, phase_dir):
         with patch.object(ex, "ROOT", tmp_project):
-            result = executor._load_guardrails()
+            result = executor._load_guardrails(phase_dir / "step2.md")
         assert "# Rules" in result
         assert "rule one" in result
         assert "# Architecture" in result
-        assert "# Guide" in result
+        assert "# Guide" not in result
 
-    def test_sections_separated_by_divider(self, executor, tmp_project):
+    def test_sections_separated_by_divider(self, executor, tmp_project, phase_dir):
         with patch.object(ex, "ROOT", tmp_project):
-            result = executor._load_guardrails()
+            result = executor._load_guardrails(phase_dir / "step2.md")
         assert "---" in result
 
-    def test_docs_sorted_alphabetically(self, executor, tmp_project):
+    def test_keeps_document_order_from_step(self, executor, tmp_project, phase_dir):
+        (phase_dir / "step2.md").write_text(
+            "## 읽어야 할 파일\n\n- `docs/guide.md`\n- `docs/arch.md`"
+        )
         with patch.object(ex, "ROOT", tmp_project):
-            result = executor._load_guardrails()
+            result = executor._load_guardrails(phase_dir / "step2.md")
         arch_pos = result.index("arch")
         guide_pos = result.index("guide")
-        assert arch_pos < guide_pos
+        assert guide_pos < arch_pos
 
-    def test_no_agents_md(self, executor, tmp_project):
+    def test_no_agents_md(self, executor, tmp_project, phase_dir):
         (tmp_project / "AGENTS.md").unlink()
         with patch.object(ex, "ROOT", tmp_project):
-            result = executor._load_guardrails()
+            result = executor._load_guardrails(phase_dir / "step2.md")
         assert "AGENTS.md" not in result
         assert "Architecture" in result
 
-    def test_no_docs_dir(self, executor, tmp_project):
+    def test_ignores_unlisted_or_missing_documents(self, executor, tmp_project, phase_dir):
         import shutil
         shutil.rmtree(tmp_project / "docs")
         with patch.object(ex, "ROOT", tmp_project):
-            result = executor._load_guardrails()
+            result = executor._load_guardrails(phase_dir / "step2.md")
         assert "Rules" in result
         assert "Architecture" not in result
 
@@ -189,7 +197,9 @@ class TestLoadGuardrails:
             idx = {"project": "T", "phase": "t", "steps": []}
             (phases_dir / "index.json").write_text(json.dumps(idx))
             inst = ex.StepExecutor.__new__(ex.StepExecutor)
-            result = inst._load_guardrails()
+            step_file = phases_dir / "step0.md"
+            step_file.write_text("# Step 0")
+            result = inst._load_guardrails(step_file)
         assert result == ""
 
 

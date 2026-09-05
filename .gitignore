@@ -42,3 +42,4 @@ phases/**/step*-output.json
 
 # local review handoff
 result.md
+plan.md
