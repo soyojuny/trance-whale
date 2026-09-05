@@ -37,6 +37,12 @@
 
 이 절차는 실제 외부 사이트나 Gemini API를 호출하지 않는다. 브라우저 확인이 필요한 경우에도 합성 fixture와 로컬 설정만 사용한다.
 
+### EPUB UI 연결 확인 (2026-09-05)
+
+- 홈의 기본 입력을 접근성 있는 EPUB 파일 선택으로 전환하고, 웹 URL 입력은 `웹 페이지 가져오기` disclosure 안에 유지했다. 선택 파일명·원문·API Key는 URL과 화면 상태에 표시하지 않는다.
+- `tests/unit/home-settings-flow.test.tsx`, `tests/integration/reader-navigation.test.tsx`, `tests/unit/catalog-sheet.test.tsx`는 20개 테스트를 통과했고, `npm run typecheck`와 `npm run lint`도 통과했다.
+- 이 실행 환경에서는 Playwright의 Next.js web server가 포트 바인딩 권한 오류로 시작하지 못해 360px·데스크톱 브라우저 확인은 수행하지 못했다. 이 검증은 Step 3에서 포트 바인딩이 가능한 환경으로 재실행한다.
+
 ## 인수 조건 추적
 
 | AC | 분류 | 자동 테스트 근거 | 수동 확인 또는 한계 |
