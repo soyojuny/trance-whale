@@ -29,6 +29,7 @@ next-env.d.ts
 # Python cache
 __pycache__/
 *.py[cod]
+.venv/
 
 # editor and OS files
 .DS_Store
