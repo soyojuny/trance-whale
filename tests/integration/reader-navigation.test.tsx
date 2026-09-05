@@ -49,6 +49,7 @@ function runtime(initialPosition: { canonicalUrl: string; scrollPosition: number
   const readerSession = {
     getState: vi.fn(() => ({ status: "idle" as const })),
     openChapter: vi.fn(async () => undefined),
+    openLocalChapter: vi.fn(async () => undefined),
     cancel: vi.fn(),
     forceReload: vi.fn(async () => undefined),
     forceRetranslate: vi.fn(async () => undefined),

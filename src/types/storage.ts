@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DEFAULT_TRANSLATION_MODE, TranslationModeSchema } from "../lib/translation/models";
 import { UserPromptSchema } from "../lib/translation/prompt";
 import { CatalogSourceSchema, ChapterSourceSchema, SourceLocatorSchema } from "./source";
+import { LocalEpubBookSchema } from "./epub";
 import { TranslationParagraphSchema } from "./translation";
 
 const timestampSchema = z.string().datetime({ offset: true });
@@ -96,6 +97,13 @@ export const SourceCacheRecordSchema = z
     }
   });
 
+export const LocalEpubArchiveRecordSchema = z
+  .object({
+    bookId: sha256Schema,
+    archive: z.instanceof(Blob),
+  })
+  .strict();
+
 export const DEFAULT_TRANSLATION_SETTINGS = {
   apiKey: "",
   userPrompt: "",
@@ -115,3 +123,5 @@ export type LastReadingPosition = z.infer<typeof LastReadingPositionSchema>;
 export type TranslationCacheRecord = z.infer<typeof TranslationCacheRecordSchema>;
 export type CatalogCacheRecord = z.infer<typeof CatalogCacheRecordSchema>;
 export type SourceCacheRecord = z.infer<typeof SourceCacheRecordSchema>;
+export type LocalEpubBookRecord = z.infer<typeof LocalEpubBookSchema>;
+export type LocalEpubArchiveRecord = z.infer<typeof LocalEpubArchiveRecordSchema>;
