@@ -8,11 +8,14 @@ import { createCatalogSession, type CatalogSession, type CatalogSessionState } f
 import { createReaderSessionController, type ReaderSessionController, type ReaderSessionState } from "../../lib/reader/session.client";
 import { prepareCachedChapterTranslation } from "../../lib/translation/cached-pipeline.client";
 import { createCatalogCache } from "../../services/catalog-cache.client";
+import { createLocalEpubLibrary } from "../../services/local-epub-library.client";
 import { createPreferencesService, type Preferences, type StorageResult } from "../../services/preferences.client";
 import { openReaderDatabase } from "../../services/reader-db.client";
 import { createSourceCache } from "../../services/source-cache.client";
+import { createLocalEpubLocator, parseLocalEpubLocator } from "../../lib/epub/locator.client";
 import { createSourceClient } from "../../services/source-client.client";
 import { createTranslationCache } from "../../services/translation-cache.client";
+import type { CatalogSource } from "../../types/source";
 import type { LastReadingPosition } from "../../types/storage";
 import ReaderView from "./reader-view";
 import Icon from "../ui/icon";
@@ -34,6 +37,7 @@ export type ReaderNavigationRuntime = {
   preferences: PreferencesPort;
   subscribeReader(listener: (state: ReaderSessionState) => void): void;
   subscribeCatalog(listener: (state: CatalogSessionState) => void): void;
+  openLocalCatalog?(bookId: string): Promise<CatalogSource | undefined>;
   close(): void;
 };
 
@@ -44,7 +48,20 @@ export type ReaderNavigationProps = {
 };
 
 function readerHref(url: string): string {
+  const local = localTarget(url);
+  if (local) return `/read?book=${local.bookId}&chapter=${local.index}`;
   return `/read?url=${encodeURIComponent(url)}`;
+}
+
+function localTarget(url: string): { bookId: string; index: number } | undefined {
+  const parsed = parseLocalEpubLocator(url);
+  return parsed ? { bookId: parsed.bookId, index: parsed.chapterIndex } : undefined;
+}
+
+function localTargetFromParams(book: string | null, chapter: string | null): { bookId: string; index: number } | undefined {
+  if (!book || !/^[a-f0-9]{64}$/i.test(book) || !chapter || !/^\d+$/.test(chapter)) return undefined;
+  const index = Number(chapter);
+  return Number.isSafeInteger(index) ? { bookId: book, index } : undefined;
 }
 
 async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
@@ -55,9 +72,12 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
   const preferences = createPreferencesService(window.localStorage);
   const translationCache = createTranslationCache({ database });
   const sourceCache = createSourceCache({ database });
+  const catalogCache = createCatalogCache({ database });
+  const localEpubLibrary = createLocalEpubLibrary({ database, catalogCache });
   const readerSession = createReaderSessionController({
     sourceClient,
     sourceCache,
+    localEpubLibrary,
     networkAvailable: () => navigator.onLine,
     loadTranslationSettings: () => preferences.loadPreferences().translation,
     preparePipeline: (request) => prepareCachedChapterTranslation(request, { cache: translationCache }),
@@ -65,7 +85,7 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
   });
   const catalogSession = createCatalogSession({
     sourceClient,
-    cache: createCatalogCache({ database }),
+    cache: catalogCache,
     onStateChange: (state) => catalogListener(state),
   });
   return {
@@ -74,6 +94,10 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
     preferences,
     subscribeReader(listener) { readerListener = listener; },
     subscribeCatalog(listener) { catalogListener = listener; },
+    async openLocalCatalog(bookId) {
+      const result = await catalogCache.get(createLocalEpubLocator(bookId, 0));
+      return result.status === "fresh" || result.status === "stale" ? result.record.catalog : undefined;
+    },
     close() {
       readerSession.cancel();
       catalogSession.cancel();
@@ -85,7 +109,8 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
 export default function ReaderNavigation({ initialUrl, navigate, runtime: suppliedRuntime }: ReaderNavigationProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const requestedUrl = initialUrl || searchParams.get("url") || "";
+  const local = localTarget(initialUrl) ?? localTargetFromParams(searchParams.get("book"), searchParams.get("chapter"));
+  const requestedUrl = local ? createLocalEpubLocator(local.bookId, local.index) : initialUrl || searchParams.get("url") || "";
   const push = navigate ?? ((href: string) => router.push(href));
   const [runtime, setRuntime] = useState<ReaderNavigationRuntime | null>(suppliedRuntime ?? null);
   const [readerState, setReaderState] = useState<ReaderSessionState>({ status: "idle" });
@@ -154,8 +179,9 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
       window.scrollTo({ top: 0, behavior: "auto" });
     }
     lastOpenedUrlRef.current = requestedUrl;
-    void runtime.readerSession.openChapter(requestedUrl);
-  }, [requestedUrl, runtime, savePosition]);
+    if (local) void runtime.readerSession.openLocalChapter(local.bookId, local.index);
+    else void runtime.readerSession.openChapter(requestedUrl);
+  }, [local, requestedUrl, runtime, savePosition]);
 
   const canonicalUrl = "chapter" in readerState ? readerState.chapter.canonicalUrl : undefined;
   useEffect(() => {
@@ -212,6 +238,18 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
     if (!runtime) return;
     catalogReturnFocusRef.current = trigger;
     setCatalogOpen(true);
+    const target = localTarget(url);
+    if (target) {
+      if (!runtime.openLocalCatalog) {
+        setCatalogState({ status: "error", message: "목차를 불러올 수 없습니다." });
+        return;
+      }
+      void runtime.openLocalCatalog(target.bookId).then((catalog) => {
+        if (catalog) setCatalogState({ status: "ready", cacheStatus: "fresh", catalog });
+        else setCatalogState({ status: "error", message: "목차를 불러올 수 없습니다." });
+      });
+      return;
+    }
     void runtime.catalogSession.open(url);
   };
   const chapter = "chapter" in readerState ? readerState.chapter : undefined;

@@ -4,9 +4,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent }
 
 import { TRANSLATION_MODELS, type TranslationMode } from "../lib/translation/models";
 import { MAX_USER_PROMPT_LENGTH } from "../lib/translation/prompt";
+import { toPublicError, type PublicError } from "../lib/errors";
+import { parseEpub } from "../lib/epub/parse-epub.client";
+import { parseLocalEpubLocator } from "../lib/epub/locator.client";
 import { validateApiKey } from "../services/gemini.client";
+import { createCatalogCache } from "../services/catalog-cache.client";
 import { createLocalDataService, type LocalDataResetResult } from "../services/local-data.client";
+import { createLocalEpubLibrary } from "../services/local-epub-library.client";
 import { createPreferencesService, type Preferences, type StorageResult } from "../services/preferences.client";
+import { openReaderDatabase } from "../services/reader-db.client";
 import {
   DEFAULT_READER_SETTINGS,
   DEFAULT_TRANSLATION_SETTINGS,
@@ -23,12 +29,17 @@ type PreferencesPort = {
 
 type LocalDataPort = { clearAll(): Promise<LocalDataResetResult> };
 type ValidateKey = typeof validateApiKey;
+type EpubImportResult =
+  | { ok: true; book: { id: string } }
+  | { ok: false; error: PublicError };
+type ImportEpub = (file: File) => Promise<EpubImportResult>;
 
 export type HomeSettingsFlowProps = {
   navigate?: (href: string) => void;
   preferences?: PreferencesPort;
   localData?: LocalDataPort;
   validateKey?: ValidateKey;
+  importEpub?: ImportEpub;
   onRetranslate?: () => void;
 };
 
@@ -37,7 +48,26 @@ function defaultNavigate(href: string): void {
 }
 
 function readerHref(url: string): string {
+  const local = parseLocalEpubLocator(url);
+  if (local) return `/read?book=${local.bookId}&chapter=${local.chapterIndex}`;
   return `/read?url=${encodeURIComponent(url)}`;
+}
+
+export async function importLocalEpub(file: File): Promise<EpubImportResult> {
+  let database: Awaited<ReturnType<typeof openReaderDatabase>> | undefined;
+  try {
+    const parsed = await parseEpub(file);
+    database = await openReaderDatabase();
+    const library = createLocalEpubLibrary({
+      database,
+      catalogCache: createCatalogCache({ database }),
+    });
+    return await library.import({ archive: file, ...parsed });
+  } catch (error) {
+    return { ok: false, error: toPublicError(error) };
+  } finally {
+    database?.close();
+  }
 }
 
 function resetFailureSummary(result: LocalDataResetResult): string | null {
@@ -55,6 +85,7 @@ export default function HomeSettingsFlow({
   preferences,
   localData,
   validateKey = validateApiKey,
+  importEpub = importLocalEpub,
   onRetranslate,
 }: HomeSettingsFlowProps) {
   const services = useMemo(() => {
@@ -73,6 +104,9 @@ export default function HomeSettingsFlow({
   const [lastPosition, setLastPosition] = useState(() => services.preferences?.loadReadingPosition() ?? null);
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState("");
+  const [webImportOpen, setWebImportOpen] = useState(false);
+  const [epubStatus, setEpubStatus] = useState("");
+  const [epubError, setEpubError] = useState("");
   const [open, setOpen] = useState(false);
   const [revealKey, setRevealKey] = useState(false);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -129,6 +163,22 @@ export default function HomeSettingsFlow({
     }
     setUrlError("");
     navigate(readerHref(parsed.toString()));
+  }
+
+  async function selectEpub(file: File | undefined): Promise<void> {
+    setEpubError("");
+    if (!file) {
+      setEpubStatus("파일 선택을 취소했습니다.");
+      return;
+    }
+    setEpubStatus("EPUB 가져오는 중");
+    const result = await importEpub(file);
+    if (!result.ok) {
+      setEpubStatus("");
+      setEpubError(result.error.message);
+      return;
+    }
+    navigate(`/read?book=${result.book.id}&chapter=0`);
   }
 
   async function save(): Promise<void> {
@@ -223,17 +273,28 @@ export default function HomeSettingsFlow({
         <section className="welcome" aria-labelledby="welcome-title">
           <p className="eyebrow">TRANCE WHALE</p>
           <h1 id="welcome-title">읽고 싶은 이야기를 가져오세요</h1>
-          <p>외국어 웹소설 주소를 입력하면 자연스러운 한국어로 이어서 읽을 수 있어요.</p>
-          <form className="url-form" onSubmit={submitUrl}>
-            <label htmlFor="novel-url">웹소설 장 URL</label>
-            <div className="url-control">
-              <span className="url-symbol"><Icon name="arrow" size={17} /></span>
-              <input id="novel-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} aria-describedby="url-support url-error" />
-              <button type="submit">번역해서 읽기</button>
-            </div>
-            <span id="url-support" className="support-note"><Icon name="check" size={15} />현재 69shuba.com의 공개 페이지를 지원해요.</span>
-            {urlError && <p id="url-error" role="alert">{urlError}</p>}
-          </form>
+          <p>합법적으로 이용할 수 있는 EPUB을 선택해 이 기기에서 번역하며 읽을 수 있어요.</p>
+          <section className="epub-import" aria-labelledby="epub-import-title">
+            <h2 id="epub-import-title">EPUB 파일 가져오기</h2>
+            <label className="epub-picker" htmlFor="epub-file">EPUB 파일 선택</label>
+            <input id="epub-file" className="visually-hidden" type="file" accept=".epub,application/epub+zip" onChange={(event) => void selectEpub(event.currentTarget.files?.[0])} />
+            <p className="support-note"><Icon name="check" size={15} />파일은 이 기기에만 저장되며 앱 서버로 전송되지 않습니다. 콘텐츠 이용 권한을 확인해 주세요.</p>
+            {epubStatus && <p role="status">{epubStatus}</p>}
+            {epubError && <p role="alert">{epubError}</p>}
+          </section>
+          <section className="web-import" aria-label="웹 페이지 가져오기">
+            <button type="button" className="web-import-toggle" aria-expanded={webImportOpen} onClick={() => setWebImportOpen((open) => !open)}>웹 페이지 가져오기</button>
+            {webImportOpen && <form className="url-form" onSubmit={submitUrl}>
+              <label htmlFor="novel-url">웹소설 장 URL</label>
+              <div className="url-control">
+                <span className="url-symbol"><Icon name="arrow" size={17} /></span>
+                <input id="novel-url" type="url" value={url} onChange={(event) => setUrl(event.target.value)} aria-describedby="url-support url-error" />
+                <button type="submit">번역해서 읽기</button>
+              </div>
+              <span id="url-support" className="support-note"><Icon name="check" size={15} />현재 69shuba.com의 공개 페이지를 지원해요.</span>
+              {urlError && <p id="url-error" role="alert">{urlError}</p>}
+            </form>}
+          </section>
           {lastPosition && (
             <button className="continue-card" type="button" aria-label="이어 읽기" onClick={() => navigate(readerHref(lastPosition.canonicalUrl))}>
               <span className="book-tile" aria-hidden="true"><Icon name="book" size={23} /></span>

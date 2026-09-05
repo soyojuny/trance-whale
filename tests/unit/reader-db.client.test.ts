@@ -146,16 +146,23 @@ describe("reader database adapter", () => {
       }],
       [READER_DB_SCHEMA.stores.catalogs.name, { keyPath: "canonicalUrl", indexes: [] }],
       [READER_DB_SCHEMA.stores.sources.name, { keyPath: "canonicalUrl", indexes: [] }],
+      [READER_DB_SCHEMA.stores.epubBooks.name, { keyPath: "id", indexes: [] }],
+      [READER_DB_SCHEMA.stores.epubArchives.name, { keyPath: "bookId", indexes: [] }],
+      [READER_DB_SCHEMA.stores.epubArchiveChunks.name, {
+        keyPath: "id",
+        indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
+      }],
     ]);
     second.close();
   });
 
-  it("upgrades a version-one database without losing translation or catalog records", async () => {
+  it("upgrades the prior database without losing translation, catalog, or source records", async () => {
     const factory = new FakeFactory();
     const translation = { cacheKey: "translation-key", accessedAt: "2026-09-04T01:00:00.000Z" };
     const catalog = { canonicalUrl: "https://www.69shuba.com/book/48273/", createdAt: "2026-09-04T01:00:00.000Z" };
+    const source = { canonicalUrl: "https://www.69shuba.com/txt/48273/1", createdAt: "2026-09-04T01:00:00.000Z" };
 
-    factory.database.version = 1;
+    factory.database.version = 2;
     factory.database.stores.set(READER_DB_SCHEMA.stores.translations.name, {
       keyPath: "cacheKey",
       indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
@@ -164,10 +171,16 @@ describe("reader database adapter", () => {
       keyPath: "canonicalUrl",
       indexes: [],
     });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.sources.name, {
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
     factory.database.valuesFor(READER_DB_SCHEMA.stores.translations.name)
       .set(translation.cacheKey, translation);
     factory.database.valuesFor(READER_DB_SCHEMA.stores.catalogs.name)
       .set(catalog.canonicalUrl, catalog);
+    factory.database.valuesFor(READER_DB_SCHEMA.stores.sources.name)
+      .set(source.canonicalUrl, source);
 
     const database = await openReaderDatabase(factory);
 
@@ -181,9 +194,55 @@ describe("reader database adapter", () => {
       "readonly",
       (store) => store.get(catalog.canonicalUrl),
     )).resolves.toEqual(catalog);
-    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.sources.name)).toEqual({
+    await expect(database.run(
+      READER_DB_SCHEMA.stores.sources.name,
+      "readonly",
+      (store) => store.get(source.canonicalUrl),
+    )).resolves.toEqual(source);
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubBooks.name)).toEqual({
+      keyPath: "id",
+      indexes: [],
+    });
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchives.name)).toEqual({
+      keyPath: "bookId",
+      indexes: [],
+    });
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchiveChunks.name)).toEqual({
+      keyPath: "id",
+      indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
+    });
+  });
+
+  it("repairs version 4 databases that were created before the archive chunk store", async () => {
+    const factory = new FakeFactory();
+    factory.database.version = 4;
+    factory.database.stores.set(READER_DB_SCHEMA.stores.translations.name, {
+      keyPath: "cacheKey",
+      indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.catalogs.name, {
       keyPath: "canonicalUrl",
       indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.sources.name, {
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.epubBooks.name, {
+      keyPath: "id",
+      indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.epubArchives.name, {
+      keyPath: "bookId",
+      indexes: [],
+    });
+
+    await openReaderDatabase(factory);
+
+    expect(factory.upgrades).toBe(1);
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchiveChunks.name)).toEqual({
+      keyPath: "id",
+      indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
     });
   });
 

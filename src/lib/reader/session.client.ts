@@ -15,7 +15,9 @@ import {
 } from "../translation/cached-pipeline.client";
 import type { SourceClient } from "../../services/source-client.client";
 import type { SourceCache } from "../../services/source-cache.client";
+import type { LocalEpubLibrary } from "../../services/local-epub-library.client";
 import type { Preferences } from "../../services/preferences.client";
+import { createLocalEpubLocator } from "../epub/locator.client";
 import { ChapterSourceSchema, SourceRequestSchema, type ChapterSource } from "../../types/source";
 import type { TranslationParagraph, TranslationProgress } from "../../types/translation";
 
@@ -173,6 +175,7 @@ type PreparePipeline = (request: {
 type ReaderSessionDependencies = {
   sourceClient: SourceClient;
   sourceCache: Pick<SourceCache, "get" | "put">;
+  localEpubLibrary?: Pick<LocalEpubLibrary, "openChapter">;
   networkAvailable: () => boolean;
   preparePipeline: PreparePipeline;
   loadTranslationSettings: () => Preferences["translation"];
@@ -182,6 +185,7 @@ type ReaderSessionDependencies = {
 export type ReaderSessionController = {
   getState(): ReaderSessionState;
   openChapter(url: string): Promise<void>;
+  openLocalChapter(bookId: string, index: number): Promise<void>;
   cancel(): void;
   forceReload(): Promise<void>;
   forceRetranslate(): Promise<void>;
@@ -224,6 +228,7 @@ export function createReaderSessionController(
   let generation = 0;
   let activeController: AbortController | undefined;
   let currentUrl: string | undefined;
+  let currentLocalChapter: { bookId: string; index: number } | undefined;
   let currentChapter: ChapterSource | undefined;
   let prepared: PreparedCachedChapterTranslation | undefined;
 
@@ -284,6 +289,7 @@ export function createReaderSessionController(
     const operation = ++generation;
     activeController = new AbortController();
     currentUrl = url;
+    currentLocalChapter = undefined;
     currentChapter = undefined;
     prepared = undefined;
     dispatch({ type: "fetch_source", url });
@@ -388,6 +394,71 @@ export function createReaderSessionController(
     await executeTranslation(operation, prepared, settings.apiKey, { forceRetranslate: false });
   };
 
+  const openLocalChapter = async (bookId: string, index: number): Promise<void> => {
+    activeController?.abort();
+    const operation = ++generation;
+    activeController = new AbortController();
+    const locator = createLocalEpubLocator(bookId, index);
+    currentUrl = locator;
+    currentLocalChapter = { bookId, index };
+    currentChapter = undefined;
+    prepared = undefined;
+    dispatch({ type: "fetch_source", url: locator });
+
+    if (!dependencies.localEpubLibrary) {
+      dispatch({ type: "fail", error: toPublicError(new SourceContractError("INVALID_URL")) });
+      activeController = undefined;
+      return;
+    }
+
+    let chapter: ChapterSource | undefined;
+    try {
+      const local = await dependencies.localEpubLibrary.openChapter(bookId, index);
+      if (local.status === "hit") {
+        const parsed = ChapterSourceSchema.safeParse(local.chapter);
+        if (parsed.success) chapter = parsed.data;
+      }
+    } catch {
+      // The local store can be unavailable without exposing its failure details.
+    }
+    if (!isCurrent(operation)) return;
+    if (!chapter) {
+      dispatch({ type: "fail", error: offlineError() });
+      activeController = undefined;
+      return;
+    }
+
+    currentChapter = chapter;
+    dispatch({ type: "source_received", chapter });
+    dispatch({ type: "check_cache" });
+    const settings = dependencies.loadTranslationSettings();
+    try {
+      prepared = await dependencies.preparePipeline({
+        chapter,
+        mode: settings.translationMode,
+        userPrompt: settings.userPrompt,
+      });
+      if (!isCurrent(operation)) return;
+      if (!dependencies.networkAvailable()) {
+        const cachedTranslation = await prepared.getCached();
+        if (!isCurrent(operation)) return;
+        if (!cachedTranslation) {
+          dispatch({ type: "fail", error: offlineError() });
+        } else {
+          dispatch({ type: "translation_finished", result: cachedTranslation });
+        }
+        activeController = undefined;
+        return;
+      }
+      await executeTranslation(operation, prepared, settings.apiKey, { forceRetranslate: false });
+    } catch (error) {
+      if (isCurrent(operation)) {
+        dispatch({ type: "fail", error: safeError(error, "translation") });
+        activeController = undefined;
+      }
+    }
+  };
+
   const rerunTranslation = async (
     reprepare: boolean,
     retryFailed?: { failedChunkIds: readonly string[]; successfulTranslations: TranslationProgress["translations"] },
@@ -424,6 +495,7 @@ export function createReaderSessionController(
   return {
     getState: () => state,
     openChapter,
+    openLocalChapter,
     cancel: () => {
       if (!activeController || activeController.signal.aborted) return;
       ++generation;
@@ -431,7 +503,8 @@ export function createReaderSessionController(
       dispatch({ type: "cancel" });
     },
     forceReload: async () => {
-      if (currentUrl) await openChapter(currentUrl, true);
+      if (currentLocalChapter) await openLocalChapter(currentLocalChapter.bookId, currentLocalChapter.index);
+      else if (currentUrl) await openChapter(currentUrl, true);
     },
     forceRetranslate: () => rerunTranslation(true),
     retryFailedTranslation: async () => {

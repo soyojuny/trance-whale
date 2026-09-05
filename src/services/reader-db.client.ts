@@ -2,7 +2,7 @@ import "client-only";
 
 export const READER_DB_SCHEMA = {
   name: "trance-whale-reader",
-  version: 2,
+  version: 5,
   stores: {
     translations: {
       name: "translation-cache",
@@ -16,6 +16,19 @@ export const READER_DB_SCHEMA = {
     sources: {
       name: "source-cache",
       keyPath: "canonicalUrl",
+    },
+    epubBooks: {
+      name: "local-epub-books",
+      keyPath: "id",
+    },
+    epubArchives: {
+      name: "local-epub-archives",
+      keyPath: "bookId",
+    },
+    epubArchiveChunks: {
+      name: "local-epub-archive-chunks",
+      keyPath: "id",
+      indexes: { bookId: "book-id" },
     },
   },
 } as const;
@@ -133,6 +146,23 @@ function upgradeDatabase(database: IDBDatabase): void {
   const sources = READER_DB_SCHEMA.stores.sources;
   if (!database.objectStoreNames.contains(sources.name)) {
     database.createObjectStore(sources.name, { keyPath: sources.keyPath });
+  }
+
+  const epubBooks = READER_DB_SCHEMA.stores.epubBooks;
+  if (!database.objectStoreNames.contains(epubBooks.name)) {
+    database.createObjectStore(epubBooks.name, { keyPath: epubBooks.keyPath });
+  }
+
+  const epubArchives = READER_DB_SCHEMA.stores.epubArchives;
+  if (!database.objectStoreNames.contains(epubArchives.name)) {
+    database.createObjectStore(epubArchives.name, { keyPath: epubArchives.keyPath });
+  }
+
+  const epubArchiveChunks = READER_DB_SCHEMA.stores.epubArchiveChunks;
+  if (!database.objectStoreNames.contains(epubArchiveChunks.name)) {
+    database
+      .createObjectStore(epubArchiveChunks.name, { keyPath: epubArchiveChunks.keyPath })
+      .createIndex(epubArchiveChunks.indexes.bookId, "bookId", { unique: false });
   }
 }
 

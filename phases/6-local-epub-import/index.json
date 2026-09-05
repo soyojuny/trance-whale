@@ -1,0 +1,38 @@
+{
+  "project": "Trance Whale",
+  "phase": "local-epub-import",
+  "steps": [
+    {
+      "step": 0,
+      "name": "epub-contracts-and-parser",
+      "status": "completed",
+      "started_at": "2026-09-05T09:35:51+0900",
+      "summary": "브라우저 전용 ZIP 검사·EPUB parser와 local-epub 런타임 계약, 합성 2장 fixture 테스트를 추가했다.",
+      "completed_at": "2026-09-05T09:46:01+0900"
+    },
+    {
+      "step": 1,
+      "name": "local-epub-library-and-reader-session",
+      "status": "completed",
+      "summary": "EPUB metadata·archive 분리 IndexedDB store, 공간 확인 import, local source 재열기와 API 없는 reader session을 구현했다.",
+      "completed_at": "2026-09-05T09:54:55+0900"
+    },
+    {
+      "step": 2,
+      "name": "epub-import-and-reader-navigation-ui",
+      "status": "completed",
+      "started_at": "2026-09-05T21:38:09+0900",
+      "summary": "홈 EPUB 선택·보조 URL disclosure와 local book/chapter reader navigation을 연결하고, 로컬 목차는 cache만 사용하도록 유지했다.",
+      "completed_at": "2026-09-05T21:47:39+0900"
+    },
+    {
+      "step": 3,
+      "name": "epub-end-to-end-validation",
+      "status": "blocked",
+      "started_at": "2026-09-05T21:47:39+0900",
+      "blocked_reason": "Playwright E2E의 Next.js/Turbopack web server가 sandbox 및 권한 상승 실행 모두에서 포트 바인딩(Operation not permitted)으로 시작하지 못했습니다. fixture file selection과 browser runtime 검증은 포트 바인딩이 허용된 환경에서 재실행해야 합니다.",
+      "blocked_at": "2026-09-05T21:50:54+0900"
+    }
+  ],
+  "created_at": "2026-09-05T09:35:51+0900"
+}

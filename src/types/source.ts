@@ -1,9 +1,15 @@
 import { z } from "zod";
 
-const httpUrlSchema = z
+export const HttpUrlSchema = z
   .string()
   .url()
   .refine((value) => /^https?:\/\//i.test(value), "URL must use HTTP or HTTPS");
+
+export const LocalEpubLocatorSchema = z
+  .string()
+  .regex(/^local-epub:\/\/book\/[a-f0-9]{64}\/chapter\/(?:0|[1-9]\d*)$/i);
+
+export const SourceLocatorSchema = z.union([HttpUrlSchema, LocalEpubLocatorSchema]);
 
 const identifierSchema = z
   .string()
@@ -14,13 +20,13 @@ const nonEmptyTextSchema = z.string().trim().min(1);
 
 export const SourceRequestSchema = z
   .object({
-    url: httpUrlSchema,
+    url: HttpUrlSchema,
   })
   .strict();
 
 export const NavigationTargetSchema = z
   .object({
-    url: httpUrlSchema,
+    url: SourceLocatorSchema,
     label: nonEmptyTextSchema.optional(),
   })
   .strict();
@@ -50,7 +56,7 @@ const paragraphsSchema = z.array(ParagraphSchema).min(1).superRefine((paragraphs
 export const CatalogChapterSchema = z
   .object({
     id: identifierSchema,
-    url: httpUrlSchema,
+    url: SourceLocatorSchema,
     title: nonEmptyTextSchema,
     number: z.number().int().positive().optional(),
     sourceIndex: z.number().int().nonnegative(),
@@ -60,8 +66,8 @@ export const CatalogChapterSchema = z
 export const ChapterSourceSchema = z
   .object({
     kind: z.literal("chapter"),
-    sourceUrl: httpUrlSchema,
-    canonicalUrl: httpUrlSchema,
+    sourceUrl: SourceLocatorSchema,
+    canonicalUrl: SourceLocatorSchema,
     siteId: identifierSchema,
     bookId: identifierSchema.optional(),
     bookTitle: nonEmptyTextSchema.optional(),
@@ -84,8 +90,8 @@ export const ChapterSourceSchema = z
 export const CatalogSourceSchema = z
   .object({
     kind: z.literal("catalog"),
-    sourceUrl: httpUrlSchema,
-    canonicalUrl: httpUrlSchema,
+    sourceUrl: SourceLocatorSchema,
+    canonicalUrl: SourceLocatorSchema,
     siteId: identifierSchema,
     bookId: identifierSchema.optional(),
     bookTitle: nonEmptyTextSchema,
@@ -95,6 +101,7 @@ export const CatalogSourceSchema = z
   .strict();
 
 export type SourceRequest = z.infer<typeof SourceRequestSchema>;
+export type LocalEpubLocator = `local-epub://book/${string}/chapter/${number}`;
 export type NavigationTarget = z.infer<typeof NavigationTargetSchema>;
 export type Paragraph = z.infer<typeof ParagraphSchema>;
 export type CatalogChapter = z.infer<typeof CatalogChapterSchema>;

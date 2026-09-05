@@ -37,6 +37,13 @@
 
 이 절차는 실제 외부 사이트나 Gemini API를 호출하지 않는다. 브라우저 확인이 필요한 경우에도 합성 fixture와 로컬 설정만 사용한다.
 
+### EPUB UI 연결 확인 (2026-09-05)
+
+- 홈의 기본 입력을 접근성 있는 EPUB 파일 선택으로 전환하고, 웹 URL 입력은 `웹 페이지 가져오기` disclosure 안에 유지했다. 선택 파일명·원문·API Key는 URL과 화면 상태에 표시하지 않는다.
+- `tests/unit/home-settings-flow.test.tsx`, `tests/integration/reader-navigation.test.tsx`, `tests/unit/catalog-sheet.test.tsx`는 20개 테스트를 통과했고, `npm run typecheck`와 `npm run lint`도 통과했다.
+- Playwright 실행은 이 환경의 Next.js web server가 포트를 열 수 없어 시작하지 못했다(`Operation not permitted`). 이번 EPUB archive 재열기 변경 후에도 같은 오류로 재실행이 중단됐다. 따라서 360px·데스크톱의 브라우저 시각 확인은 포트 바인딩이 가능한 환경에서 다시 실행한다.
+- EPUB archive 재열기 단위 검증은 archive·목차·장 경로만 저장하고 source cache에 EPUB 원문 장을 남기지 않으며, 저장 archive에서 요청 장을 다시 추출하는 것을 확인한다. E2E도 EPUB 원문 source cache가 비어 있는지를 확인한다.
+
 ## 인수 조건 추적
 
 | AC | 분류 | 자동 테스트 근거 | 수동 확인 또는 한계 |

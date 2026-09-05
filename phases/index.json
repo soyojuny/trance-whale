@@ -24,6 +24,11 @@
       "dir": "5-prd-gap-remediation",
       "status": "completed",
       "completed_at": "2026-09-04T23:41:42+0900"
+    },
+    {
+      "dir": "6-local-epub-import",
+      "status": "blocked",
+      "blocked_at": "2026-09-05T21:50:54+0900"
     }
   ]
 }

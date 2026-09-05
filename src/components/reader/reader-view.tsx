@@ -157,7 +157,7 @@ export default function ReaderView({
 
         <nav className="chapter-nav" aria-label="장 이동">
           <NavigationButton direction="previous" target={chapter.navigation.previous} onNavigate={onNavigateChapter} />
-          <button type="button" className="catalog-shortcut" disabled={!chapter.navigation.catalog} aria-label="목차 열기" onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}><Icon name="list" /><span>목차</span></button>
+          <button type="button" className="catalog-shortcut" disabled={!chapter.navigation.catalog} aria-label={chapter.navigation.catalog ? "목차 열기" : "목차 없음"} onClick={() => chapter.navigation.catalog && onOpenCatalog?.(chapter.navigation.catalog.url)}><Icon name="list" /><span>목차</span></button>
           <NavigationButton direction="next" target={chapter.navigation.next} onNavigate={onNavigateChapter} />
         </nav>
       </div>

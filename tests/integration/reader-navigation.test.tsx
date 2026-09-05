@@ -8,6 +8,7 @@ import type { CatalogSessionState } from "../../src/lib/catalog/session.client";
 import type { ReaderSessionState } from "../../src/lib/reader/session.client";
 import { DEFAULT_READER_SETTINGS, DEFAULT_TRANSLATION_SETTINGS, type LastReadingPosition } from "../../src/types/storage";
 import type { ChapterSource } from "../../src/types/source";
+import { createLocalEpubLocator } from "../../src/lib/epub/locator.client";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -49,6 +50,7 @@ function runtime(initialPosition: { canonicalUrl: string; scrollPosition: number
   const readerSession = {
     getState: vi.fn(() => ({ status: "idle" as const })),
     openChapter: vi.fn(async () => undefined),
+    openLocalChapter: vi.fn(async () => undefined),
     cancel: vi.fn(),
     forceReload: vi.fn(async () => undefined),
     forceRetranslate: vi.fn(async () => undefined),
@@ -175,5 +177,59 @@ describe("reader navigation and position", () => {
     expect(screen.getAllByRole("button", { name: "다음 장 없음" })).toHaveLength(2);
     for (const button of screen.getAllByRole("button", { name: /장 없음/ })) expect(button).toBeDisabled();
     expect(screen.getByRole("navigation", { name: "모바일 독서 도구" })).toBeInTheDocument();
+  });
+
+  it("opens local EPUB URLs without a source API request and keeps chapter navigation internal", async () => {
+    const bookId = "a".repeat(64);
+    const testRuntime = runtime();
+    const navigate = vi.fn();
+    const current = {
+      ...chapter("2", {
+        previous: { url: createLocalEpubLocator(bookId, 0), label: "첫 장" },
+        next: { url: createLocalEpubLocator(bookId, 2), label: "셋째 장" },
+      }),
+      sourceUrl: createLocalEpubLocator(bookId, 1),
+      canonicalUrl: createLocalEpubLocator(bookId, 1),
+      siteId: "local-epub",
+      bookId,
+    } as ChapterSource;
+    render(<ReaderNavigation initialUrl={current.canonicalUrl} navigate={navigate} runtime={testRuntime.value} />);
+
+    await waitFor(() => expect(testRuntime.readerSession.openLocalChapter).toHaveBeenCalledWith(bookId, 1));
+    expect(testRuntime.readerSession.openChapter).not.toHaveBeenCalled();
+    testRuntime.publishReader(complete(current));
+    expect(screen.getAllByRole("button", { name: "목차 없음" })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: /다음 장/ })[0]);
+    expect(navigate).toHaveBeenCalledWith(`/read?book=${bookId}&chapter=2`);
+  });
+
+  it("opens the stored local EPUB catalog without asking the source API", async () => {
+    const bookId = "a".repeat(64);
+    const testRuntime = runtime();
+    const openLocalCatalog = vi.fn(async () => ({
+      kind: "catalog" as const,
+      sourceUrl: createLocalEpubLocator(bookId, 0),
+      canonicalUrl: createLocalEpubLocator(bookId, 0),
+      siteId: "local-epub",
+      bookId,
+      bookTitle: "합성 책",
+      chapters: [{ id: "chapter-1", url: createLocalEpubLocator(bookId, 1), title: "둘째 장", sourceIndex: 1 }],
+      fetchedAt: "2026-09-05T00:00:00.000Z",
+    }));
+    testRuntime.value.openLocalCatalog = openLocalCatalog;
+    const current = {
+      ...chapter("1", { catalog: { url: createLocalEpubLocator(bookId, 0) } }),
+      sourceUrl: createLocalEpubLocator(bookId, 1),
+      canonicalUrl: createLocalEpubLocator(bookId, 1),
+      siteId: "local-epub",
+      bookId,
+    } as ChapterSource;
+    render(<ReaderNavigation initialUrl={current.canonicalUrl} runtime={testRuntime.value} navigate={vi.fn()} />);
+    testRuntime.publishReader(complete(current));
+
+    fireEvent.click(screen.getByRole("button", { name: "목차 열기 (상단)" }));
+    await waitFor(() => expect(openLocalCatalog).toHaveBeenCalledWith(bookId));
+    expect(testRuntime.catalogSession.open).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog", { name: /목차/ })).toBeInTheDocument();
   });
 });

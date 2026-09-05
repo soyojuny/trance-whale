@@ -2,13 +2,10 @@ import { z } from "zod";
 
 import { DEFAULT_TRANSLATION_MODE, TranslationModeSchema } from "../lib/translation/models";
 import { UserPromptSchema } from "../lib/translation/prompt";
-import { CatalogSourceSchema, ChapterSourceSchema } from "./source";
+import { CatalogSourceSchema, ChapterSourceSchema, SourceLocatorSchema } from "./source";
+import { LocalEpubBookSchema } from "./epub";
 import { TranslationParagraphSchema } from "./translation";
 
-const httpUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => /^https?:\/\//i.test(value), "URL must use HTTP or HTTPS");
 const timestampSchema = z.string().datetime({ offset: true });
 const nonEmptyStringSchema = z.string().trim().min(1);
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/i);
@@ -33,7 +30,7 @@ export const ReaderSettingsSchema = z
 
 export const LastReadingPositionSchema = z
   .object({
-    canonicalUrl: httpUrlSchema,
+    canonicalUrl: SourceLocatorSchema,
     scrollPosition: z.number().nonnegative(),
     updatedAt: timestampSchema,
   })
@@ -60,7 +57,7 @@ const translatedParagraphsSchema = z
 export const TranslationCacheRecordSchema = z
   .object({
     cacheKey: sha256Schema,
-    canonicalUrl: httpUrlSchema,
+    canonicalUrl: SourceLocatorSchema,
     contentHash: sha256Schema,
     modelId: nonEmptyStringSchema,
     targetLanguage: z.literal("ko"),
@@ -75,7 +72,7 @@ export const TranslationCacheRecordSchema = z
 
 export const CatalogCacheRecordSchema = z
   .object({
-    canonicalUrl: httpUrlSchema,
+    canonicalUrl: SourceLocatorSchema,
     catalog: CatalogSourceSchema,
     createdAt: timestampSchema,
     accessedAt: timestampSchema,
@@ -85,7 +82,7 @@ export const CatalogCacheRecordSchema = z
 
 export const SourceCacheRecordSchema = z
   .object({
-    canonicalUrl: httpUrlSchema,
+    canonicalUrl: SourceLocatorSchema,
     createdAt: timestampSchema,
     chapter: ChapterSourceSchema,
   })
@@ -99,6 +96,24 @@ export const SourceCacheRecordSchema = z
       });
     }
   });
+
+export const LocalEpubArchiveRecordSchema = z
+  .object({
+    bookId: sha256Schema,
+    byteSize: z.number().int().positive(),
+    chunkCount: z.number().int().positive(),
+    chapterPaths: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+export const LocalEpubArchiveChunkRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    bookId: sha256Schema,
+    index: z.number().int().nonnegative(),
+    encodedBytes: z.string().min(1),
+  })
+  .strict();
 
 export const DEFAULT_TRANSLATION_SETTINGS = {
   apiKey: "",
@@ -119,3 +134,6 @@ export type LastReadingPosition = z.infer<typeof LastReadingPositionSchema>;
 export type TranslationCacheRecord = z.infer<typeof TranslationCacheRecordSchema>;
 export type CatalogCacheRecord = z.infer<typeof CatalogCacheRecordSchema>;
 export type SourceCacheRecord = z.infer<typeof SourceCacheRecordSchema>;
+export type LocalEpubBookRecord = z.infer<typeof LocalEpubBookSchema>;
+export type LocalEpubArchiveRecord = z.infer<typeof LocalEpubArchiveRecordSchema>;
+export type LocalEpubArchiveChunkRecord = z.infer<typeof LocalEpubArchiveChunkRecordSchema>;

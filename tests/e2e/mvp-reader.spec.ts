@@ -1,9 +1,12 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { syntheticEpubArchive } from "../fixtures/epub/synthetic-epub";
 
 const API_KEY = "e2e-browser-only-key";
 const CHAPTER_ONE = "https://www.69shuba.com/txt/48273/1";
 const CHAPTER_TWO = "https://www.69shuba.com/txt/48273/2";
 const CATALOG = "https://www.69shuba.com/book/48273/";
+const EPUB_FILENAME = "synthetic-reader.epub";
+const EPUB_API_KEY = "e2e-local-epub-key";
 
 function chapter(url: string, number: number) {
   return {
@@ -90,10 +93,127 @@ async function saveKeyAndOpen(page: Page) {
   await page.getByRole("button", { name: "변경사항 저장" }).click();
   await expect(page.getByText("저장됨 · 다음 장부터 적용")).toBeVisible();
   await page.getByRole("button", { name: "설정 닫기" }).click();
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await expect(page.getByRole("heading", { name: "제1화 산문" })).toBeVisible();
 }
+
+async function saveKeyForLocalEpub(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "설정 열기" }).click();
+  await page.getByLabel("Gemini API Key").fill(EPUB_API_KEY);
+  await page.getByRole("button", { name: "변경사항 저장" }).click();
+  await expect(page.getByText("저장됨 · 다음 장부터 적용")).toBeVisible();
+  await page.getByRole("button", { name: "설정 닫기" }).click();
+}
+
+async function localEpubStorage(page: Page) {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("trance-whale-reader");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const read = (storeName: string) => new Promise<unknown[]>((resolve, reject) => {
+      const request = database.transaction(storeName, "readonly").objectStore(storeName).getAll();
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    const [books, archives, sources, translations] = await Promise.all([
+      read("local-epub-books"),
+      read("local-epub-archives"),
+      read("source-cache"),
+      read("translation-cache"),
+    ]);
+    database.close();
+    return { books, archives, sources, translations };
+  });
+}
+
+test("합성 EPUB을 기기에서 번역·탐색하고 reload 및 offline에서 cache를 복원한다", async ({ page, context }) => {
+  const geminiRequests: string[] = [];
+  const sourceRequests: string[] = [];
+  await page.route("**/api/source/**", async (route) => {
+    sourceRequests.push(route.request().url());
+    await route.abort();
+  });
+  await page.route("https://generativelanguage.googleapis.com/**", async (route) => {
+    geminiRequests.push(route.request().postData() ?? "");
+    expect(route.request().headers()["x-goog-api-key"]).toBe(EPUB_API_KEY);
+    const request = route.request().postDataJSON() as { contents?: Array<{ parts?: Array<{ text?: string }> }> };
+    const text = request.contents?.[0]?.parts?.[0]?.text ?? "";
+    if (text === "Reply with ok.") {
+      await route.fulfill({ json: { candidates: [{ content: { parts: [{ text: "ok" }] } }] } });
+      return;
+    }
+    const paragraphs = (JSON.parse(text) as { paragraphs: Array<{ id: string }> }).paragraphs;
+    await route.fulfill({ json: {
+      candidates: [{ content: { parts: [{ text: JSON.stringify({
+        translations: paragraphs.map(({ id }) => ({ id, text: `${id} EPUB 번역` })),
+      }) }] } }],
+    } });
+  });
+
+  await saveKeyForLocalEpub(page);
+  await page.getByLabel("EPUB 파일 선택").setInputFiles({
+    name: EPUB_FILENAME,
+    mimeType: "application/epub+zip",
+    buffer: Buffer.from(syntheticEpubArchive()),
+  });
+  await expect(page).toHaveURL(/\/read\?book=[a-f0-9]{64}&chapter=0/);
+  await expect(page.getByRole("heading", { name: "첫 항해" })).toBeVisible();
+  await expect(page.getByText("p-1 EPUB 번역")).toBeVisible();
+  await expect(page.locator(".reader-section script, .reader-section iframe")).toHaveCount(0);
+  await expect(page.locator(".reader-section")).not.toContainText("window.bad");
+
+  const firstChapterRequests = geminiRequests.length;
+  await page.getByRole("button", { name: "다음 장: 둘째 항해" }).first().click();
+  await expect(page).toHaveURL(/\/read\?book=[a-f0-9]{64}&chapter=1/);
+  await expect(page.getByRole("heading", { name: "둘째 항해" })).toBeVisible();
+  await expect(page.getByText("p-1 EPUB 번역")).toBeVisible();
+  await expect.poll(() => geminiRequests.length).toBeGreaterThan(firstChapterRequests);
+
+  await page.getByRole("button", { name: "목차 열기", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "목차" })).toBeVisible();
+  await page.getByRole("button", { name: /첫 항해/ }).click();
+  await expect(page.getByRole("heading", { name: "첫 항해" })).toBeVisible();
+  await expect.poll(() => geminiRequests.length).toBe(firstChapterRequests + 1);
+
+  const storage = await localEpubStorage(page);
+  expect(storage.books).toHaveLength(1);
+  expect(storage.archives).toHaveLength(1);
+  expect(storage.sources).toHaveLength(0);
+  expect(storage.translations).toHaveLength(2);
+  expect(JSON.stringify({ books: storage.books, archives: storage.archives })).not.toContain(EPUB_FILENAME);
+  expect(JSON.stringify(storage)).not.toContain(EPUB_API_KEY);
+  expect(sourceRequests).toEqual([]);
+
+  const beforeReload = geminiRequests.length;
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "첫 항해" })).toBeVisible();
+  await expect(page.getByText("p-1 EPUB 번역")).toBeVisible();
+  expect(geminiRequests).toHaveLength(beforeReload);
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "첫 항해" })).toBeVisible();
+  await expect(page.getByText("p-1 EPUB 번역")).toBeVisible();
+  expect(geminiRequests).toHaveLength(beforeReload);
+  expect(sourceRequests).toEqual([]);
+
+  const cacheEntries = await page.evaluate(async () => {
+    const names = await caches.keys();
+    const entries = await Promise.all(names.map(async (name) => {
+      const cache = await caches.open(name);
+      return (await cache.keys()).map((request) => request.url);
+    }));
+    return entries.flat();
+  });
+  expect(JSON.stringify(cacheEntries)).not.toContain(EPUB_API_KEY);
+  expect(JSON.stringify(cacheEntries)).not.toContain(EPUB_FILENAME);
+  expect(cacheEntries.some((url) => url.includes("/api/") || url.includes("generativelanguage.googleapis.com"))).toBe(false);
+});
 
 test("설정부터 번역, 보기 모드와 내부 장·목차 이동까지 완료한다", async ({ page }) => {
   const boundaries = await mockBoundaries(page);
@@ -151,6 +271,7 @@ test("취소와 부분 실패 재시도가 성공한 문단을 버리지 않는�
   await page.getByRole("button", { name: "설정 닫기" }).click();
 
   boundaries.setTranslationMode("delayed");
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await page.getByRole("button", { name: "번역 취소" }).click();
@@ -172,6 +293,7 @@ test("부분 실패 재시도는 실패한 chunk만 Gemini에 다시 보낸다",
   await page.getByRole("button", { name: "설정 닫기" }).click();
 
   boundaries.setTranslationMode("blocked-once");
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await expect(page.locator(".translation-failure")).toContainText("번역하지 못한 문단");

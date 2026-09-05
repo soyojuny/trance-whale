@@ -10,6 +10,8 @@ import type {
   PreparedCachedChapterTranslation,
 } from "../../src/lib/translation/cached-pipeline.client";
 import type { SourceCache, SourceCachePutResult } from "../../src/services/source-cache.client";
+import type { LocalEpubLibrary } from "../../src/services/local-epub-library.client";
+import { createLocalEpubLocator } from "../../src/lib/epub/locator.client";
 import type { ChapterSource } from "../../src/types/source";
 import type { TranslationProgress } from "../../src/types/translation";
 
@@ -79,6 +81,7 @@ function setup(
       mode: "fast" | "quality";
       userPrompt: string;
     }) => Promise<PreparedCachedChapterTranslation>;
+    localEpubLibrary?: Pick<LocalEpubLibrary, "openChapter">;
   } = {},
 ) {
   const states: ReaderSessionState[] = [];
@@ -98,6 +101,7 @@ function setup(
   const controller = createReaderSessionController({
     sourceClient,
     sourceCache,
+    localEpubLibrary: overrides.localEpubLibrary,
     networkAvailable: overrides.networkAvailable ?? (() => true),
     preparePipeline,
     loadTranslationSettings: () => ({
@@ -137,6 +141,40 @@ describe("reader session reducer", () => {
 });
 
 describe("reader session controller", () => {
+  it("opens a stored local EPUB chapter through the cached pipeline without a source API request", async () => {
+    const bookId = "a".repeat(64);
+    const local = {
+      ...chapter("1"),
+      sourceUrl: createLocalEpubLocator(bookId, 0),
+      canonicalUrl: createLocalEpubLocator(bookId, 0),
+      siteId: "local-epub",
+      bookId,
+    } as ChapterSource;
+    const complete = progress("complete", [
+      { id: "p1", text: "하나" },
+      { id: "p2", text: "둘" },
+      { id: "p3", text: "셋" },
+    ]);
+    const execute = vi.fn();
+    const getCached = vi.fn(async () => result(complete, "hit"));
+    const localEpubLibrary = { openChapter: vi.fn(async () => ({ status: "hit" as const, chapter: local })) };
+    const { controller, sourceClient, sourceCache, preparePipeline } = setup(execute, {
+      localEpubLibrary,
+      networkAvailable: () => false,
+      preparePipeline: async () => ({ cacheKey: "cache-key", getCached, execute }),
+    });
+
+    await controller.openLocalChapter(bookId, 0);
+
+    expect(localEpubLibrary.openChapter).toHaveBeenCalledWith(bookId, 0);
+    expect(sourceClient.fetchChapter).not.toHaveBeenCalled();
+    expect(sourceCache.get).not.toHaveBeenCalled();
+    expect(preparePipeline).toHaveBeenCalledWith(expect.objectContaining({ chapter: local }));
+    expect(getCached).toHaveBeenCalledOnce();
+    expect(execute).not.toHaveBeenCalled();
+    expect(controller.getState()).toMatchObject({ status: "complete", chapter: local });
+  });
+
   it.each(["hit", "miss"] as const)("opens a chapter through the state sequence on cache %s", async (cache) => {
     const execute = vi.fn(async ({ onProgress }) => {
       const complete = progress("complete", [
