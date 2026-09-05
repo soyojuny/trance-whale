@@ -20,7 +20,10 @@
     {
       "step": 2,
       "name": "epub-import-and-reader-navigation-ui",
-      "status": "pending"
+      "status": "error",
+      "started_at": "2026-09-05T09:54:55+0900",
+      "error_message": "[3회 시도 후 실패] Step did not update status",
+      "failed_at": "2026-09-05T09:55:01+0900"
     },
     {
       "step": 3,
