@@ -13,7 +13,9 @@
     {
       "step": 1,
       "name": "local-epub-library-and-reader-session",
-      "status": "pending"
+      "status": "completed",
+      "summary": "EPUB metadata·archive 분리 IndexedDB store, 공간 확인 import, local source 재열기와 API 없는 reader session을 구현했다.",
+      "completed_at": "2026-09-05T09:54:55+0900"
     },
     {
       "step": 2,
