@@ -32,8 +32,8 @@ const chapterTwo = `<?xml version="1.0" encoding="UTF-8"?>
 const navigation = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body><nav epub:type="toc"><ol><li><a href="text/chapter-1.xhtml">첫 항해</a></li><li><a href="text/chapter-2.xhtml">둘째 항해</a></li></ol></nav></body></html>`;
 
-export function syntheticEpubFixture(options: FixtureOptions = {}): Blob {
-  const archive = zipSync({
+export function syntheticEpubArchive(options: FixtureOptions = {}): Uint8Array {
+  return zipSync({
     mimetype: [strToU8("application/epub+zip"), { level: 0 }],
     "META-INF/container.xml": strToU8(options.container ?? container),
     "OPS/package.opf": strToU8(packageDocument),
@@ -42,7 +42,10 @@ export function syntheticEpubFixture(options: FixtureOptions = {}): Blob {
     "OPS/text/chapter-2.xhtml": strToU8(chapterTwo),
     ...options.extraEntries,
   });
+}
 
+export function syntheticEpubFixture(options: FixtureOptions = {}): Blob {
+  const archive = syntheticEpubArchive(options);
   return {
     size: archive.byteLength,
     arrayBuffer: async () => archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength),
