@@ -2,12 +2,12 @@
 
 ## 1. 목적
 
-Trance Whale은 외부 웹소설 페이지를 안전하게 읽어 구조화하고, 사용자의 Google AI Studio API Key로 브라우저에서 Gemini 번역을 수행하는 PWA다.
+Trance Whale은 사용자가 선택한 EPUB을 브라우저에서 안전하게 읽어 구조화하고, 사용자의 Google AI Studio API Key로 Gemini 번역을 수행하는 PWA다. 서버 기반 웹소설 페이지 수집은 보조 경로로 유지한다.
 
 이 문서는 다음 경계를 정의한다.
 
-- 앱 서버: 외부 URL 검증, HTML 수집, 사이트별 본문 및 목차 추출
-- 브라우저: 사용자 설정, Gemini 번역, 리더 UI, 로컬 캐시
+- 앱 서버: 보조 웹페이지 경로의 외부 URL 검증, HTML 수집, 사이트별 본문 및 목차 추출
+- 브라우저: EPUB 해제·파싱, 사용자 설정, Gemini 번역, 리더 UI, 로컬 저장소
 - 외부 시스템: 지원 e-book 사이트와 Gemini API
 
 제품 범위와 인수 조건은 `docs/PRD.md`를 따른다.
@@ -40,7 +40,13 @@ Trance Whale은 외부 웹소설 페이지를 안전하게 읽어 구조화하�
 
 이를 통해 동일 출처 정책 문제를 피하고, 원본 스크립트·광고·추적 코드가 앱에서 실행되지 않게 한다.
 
-### 3.2 HTML 수집과 번역의 책임을 분리한다
+### 3.2 EPUB은 브라우저에서만 처리한다
+
+사용자가 파일 선택기로 고른 `.epub`만 브라우저 전용 파서가 처리한다. 원본 압축 Blob, 추출한 장 원문, 번역 및 API Key는 서버로 보내지 않는다. 파서는 컨테이너·OPF·spine·navigation을 검증한 뒤 XHTML의 제목과 텍스트 문단만 정규화하며, archive의 HTML·스타일·이미지·스크립트·iframe·이벤트 핸들러는 저장하거나 렌더링하지 않는다.
+
+로컬 장의 canonical locator는 `local-epub://book/{bookId}/chapter/{index}`다. 이는 앱 내부 식별자일 뿐 URL 수집 API 또는 외부 fetch에 전달할 수 없다.
+
+### 3.3 HTML 수집과 번역의 책임을 분리한다
 
 - 앱 서버는 원본 HTML을 수집하고 구조화한다.
 - 브라우저는 사용자의 API Key로 Gemini API를 직접 호출한다.
@@ -48,7 +54,7 @@ Trance Whale은 외부 웹소설 페이지를 안전하게 읽어 구조화하�
 
 이 구조는 DB 없는 BYOK(Bring Your Own Key) 제품 요구사항에 맞고, 사용자의 키가 앱 인프라에 남는 것을 방지한다.
 
-### 3.3 사이트별 추출 어댑터를 사용한다
+### 3.4 사이트별 추출 어댑터를 사용한다
 
 범용 가독성 알고리즘에만 의존하지 않고 지원 사이트마다 명시적인 추출기를 둔다. MVP에는 `www.69shuba.com` 어댑터를 제공한다.
 
@@ -67,12 +73,12 @@ interface SiteExtractor {
 
 CSS 선택자, 문자 인코딩 보정, 광고 제거 규칙과 URL 패턴은 해당 어댑터 안에만 둔다.
 
-### 3.4 번역 결과는 브라우저에 캐시한다
+### 3.5 번역 결과와 EPUB은 브라우저에 저장한다
 
 번역문과 목차는 IndexedDB에 저장한다. 동일 콘텐츠를 다시 열 때 API를 재호출하지 않아 속도와 무료 할당량을 절약한다.
 
 - localStorage: API Key, 프롬프트, 선택 모델, 리더 설정, 마지막 읽기 위치
-- IndexedDB: 원문 메타데이터, 번역 결과, 목차, 접근 시각
+- IndexedDB: EPUB 책 메타데이터·archive Blob, 원문 메타데이터, 번역 결과, 목차, 접근 시각
 - Service Worker Cache Storage: 앱 셸과 정적 자산만 저장
 
 세 저장소의 책임을 섞지 않는다.
@@ -81,12 +87,12 @@ CSS 선택자, 문자 인코딩 보정, 광고 제거 규칙과 URL 패턴은 �
 
 ```text
 ┌──────────────────────────── Browser / PWA ────────────────────────────┐
-│ URL 입력 → 리더 상태 → 번역 오케스트레이터 → Gemini Developer API   │
-│                 │                 │                    ▲              │
-│                 │                 └─ IndexedDB 캐시 ───┘              │
-│                 └─ localStorage(키·설정·읽기 위치)                    │
-└───────────────────────────────┬───────────────────────────────────────┘
-                                │ 구조화 요청/응답(API Key 없음)
+│ EPUB 선택 → 브라우저 전용 파서 → 리더 상태 → Gemini Developer API    │
+│                    │                 │                    ▲            │
+│                    └─ IndexedDB(archive·장·번역) ──────┘              │
+│ URL 입력(보조) ─────────────────────┬─ localStorage(키·설정·읽기 위치) │
+└────────────────────────────────────┬──────────────────────────────────┘
+                                     │ 웹페이지 보조 요청/응답(API Key 없음)
 ┌───────────────────────────────▼───────────────────────────────────────┐
 │ Next.js Route Handler                                               │
 │ 요청 검증 → URL 보안 검증 → 안전한 fetch → 사이트 어댑터 → 스키마 검증 │
@@ -110,7 +116,7 @@ src/
 │   ├── catalog/page.tsx                # 앱 내부 목차
 │   ├── settings/page.tsx               # API Key, 모델, 프롬프트, 저장소
 │   ├── layout.tsx
-│   ├── page.tsx                        # URL 입력 및 이어 읽기
+│   ├── page.tsx                        # EPUB 선택, 웹 URL 보조 입력 및 이어 읽기
 │   └── manifest.ts
 ├── components/
 │   ├── reader/                         # 본문, 진행률, 장 탐색
@@ -124,6 +130,9 @@ src/
 │   ├── source/
 │   │   ├── fetch-source.server.ts      # 제한된 외부 fetch
 │   │   └── validate-url.server.ts      # SSRF 방어
+│   ├── epub/
+│   │   ├── parse-epub.client.ts        # 컨테이너·OPF·XHTML 브라우저 파서
+│   │   └── locator.client.ts           # local-epub locator 생성·검증
 │   ├── translation/
 │   │   ├── chunk.ts                    # 문단 단위 요청 묶음
 │   │   ├── cache-key.client.ts         # 캐시 키 생성
@@ -132,6 +141,7 @@ src/
 ├── services/
 │   ├── gemini.client.ts                # 브라우저 전용 Gemini 래퍼
 │   ├── reader-db.client.ts             # IndexedDB 접근
+│   ├── local-epub-library.client.ts    # EPUB archive·메타데이터 저장소
 │   └── preferences.client.ts           # localStorage 접근
 └── types/
     ├── source.ts                       # ChapterSource, CatalogSource
@@ -151,9 +161,25 @@ tests/
 ### 6.1 추출 결과
 
 ```ts
+type LocalEpubLocator = `local-epub://book/${string}/chapter/${number}`;
+
 type NavigationTarget = {
   url: string;
   label?: string;
+};
+
+type LocalEpubBook = {
+  id: string; // EPUB 파일 바이트의 SHA-256
+  title: string;
+  author?: string;
+  language?: string;
+  sourceByteSize: number;
+  importedAt: string;
+  chapters: Array<{
+    index: number;
+    canonicalUrl: LocalEpubLocator;
+    title: string;
+  }>;
 };
 
 type ChapterSource = {
@@ -195,6 +221,8 @@ type CatalogSource = {
 ```
 
 문단 ID는 한 장 안에서 안정적인 순서를 표현해야 한다. Gemini 응답과 원문 문단을 위치가 아닌 ID로 대응시켜 누락과 순서 변경을 검출한다.
+
+EPUB 장은 기존 `ChapterSource` 모양으로 정규화한다. `sourceUrl`과 `canonicalUrl`에는 `LocalEpubLocator`, `siteId`에는 로컬 EPUB 식별값을 사용하고, `navigation.previous`·`next`는 같은 책의 인접 장만 가리킨다. EPUB 목차는 같은 책의 로컬 `CatalogSource`로 제공한다.
 
 ### 6.2 번역 캐시
 
@@ -241,6 +269,7 @@ type TranslationCacheRecord = {
 ### 7.3 공통 API 규칙
 
 - 요청 본문 크기를 제한한다.
+- 서버 요청 스키마는 HTTP(S) URL만 허용하며 `local-epub://`을 포함한 앱 내부 locator는 거부한다.
 - 응답은 명시적인 성공 타입 또는 공개 오류 타입을 사용한다.
 - 원본 HTML과 upstream 응답 본문을 클라이언트에 그대로 반환하지 않는다.
 - Route Handler는 Node.js 런타임에서 실행한다. DNS 및 IP 검증이 필요한 수집 코드를 Edge 런타임에 배치하지 않는다.
@@ -248,7 +277,24 @@ type TranslationCacheRecord = {
 
 ## 8. 데이터 흐름
 
-### 8.1 장 열기
+### 8.1 로컬 EPUB 가져오기와 장 열기
+
+```text
+사용자 파일 선택
+  → archive 중앙 디렉터리·크기 한도 검사
+  → mimetype / container.xml / OPF / spine / navigation 검증
+  → XHTML의 제목·텍스트 문단만 추출하고 content hash 계산
+  → storage estimate 및 persist 요청
+  → IndexedDB에 book metadata + archive Blob + 장 source 저장
+  → /read?book={bookId}&chapter={index}
+  → 번역 캐시 키 계산
+  ├─ cache hit  → IndexedDB 번역문 표시
+  └─ cache miss → 본문 분할 → Gemini 요청 → 묶음별 검증/표시/저장
+```
+
+이 경로는 앱 서버, `/api/**` 또는 원본 웹사이트에 요청하지 않는다. archive의 압축 해제 전과 후 모두 설정된 크기·항목·장·문단 한도를 적용한다.
+
+### 8.2 웹페이지 보조 경로의 장 열기
 
 ```text
 사용자 URL 입력
@@ -263,11 +309,11 @@ type TranslationCacheRecord = {
   └─ cache miss → 본문 분할 → Gemini 요청 → 묶음별 검증/표시/저장
 ```
 
-### 8.2 이전 장과 다음 장
+### 8.3 이전 장과 다음 장
 
-탐색 버튼은 원본 링크로 브라우저를 이동시키지 않는다. 대상 URL을 앱의 `/read?url=...` 상태로 전달하고 장 열기 흐름을 반복한다.
+탐색 버튼은 원본 링크로 브라우저를 이동시키지 않는다. 웹페이지는 대상 URL을 앱의 `/read?url=...` 상태로 전달하고 보조 장 열기 흐름을 반복한다. EPUB은 `/read?book=...&chapter=...` 상태로 같은 책의 저장된 인접 장을 source client fetch 없이 연다.
 
-### 8.3 목차
+### 8.4 목차
 
 ```text
 ChapterSource.navigation.catalog
@@ -278,7 +324,7 @@ ChapterSource.navigation.catalog
   → 선택한 URL을 앱 리더에서 열기
 ```
 
-2,000개 이상의 항목도 DOM에 모두 렌더링하지 않도록 가상 목록을 사용한다. 목차 제목은 MVP에서 번역하지 않는다.
+EPUB은 저장된 로컬 목차를 우선 사용하고, 목차가 없으면 spine 순서만 제공한다. 2,000개 이상의 항목도 DOM에 모두 렌더링하지 않도록 가상 목록을 사용한다. 목차 제목은 MVP에서 번역하지 않는다.
 
 ## 9. 번역 설계
 
@@ -332,10 +378,11 @@ Gemini에는 문단 ID와 번역 문자열로 이루어진 구조화 출력을 �
 리더 상태는 다음 상태 머신을 따른다.
 
 ```text
-idle → fetching_source → parsing_response → checking_cache
-  → translating → complete
-  └────────────────────→ partial_failure
-각 네트워크 상태 → cancelled | failed
+idle → importing_epub → checking_storage → opening_local_chapter → checking_cache
+idle → fetching_source → parsing_response ────────────────────────────┘
+checking_cache → translating → complete
+              └────────────→ partial_failure
+각 상태 → cancelled | failed
 ```
 
 ## 11. 로컬 저장 전략
@@ -346,15 +393,16 @@ idle → fetching_source → parsing_response → checking_cache
 - 사용자 프롬프트
 - 선택 모델
 - 글자 크기, 줄 간격, 보기 모드
-- 마지막 URL과 스크롤 위치
+- 마지막 EPUB 장 또는 웹 URL과 스크롤 위치
 
 API Key는 사용자가 명시적으로 저장을 선택했을 때만 기록하는 방안을 UI 구현 시 우선 검토한다. 저장된 키는 XSS에 노출될 수 있으므로 강한 CSP와 제3자 스크립트 배제가 필수다.
 
 ### IndexedDB
 
-- 번역 캐시 최대 100MB
-- 최근 사용 시각 기준 LRU 정리
-- 브라우저 quota 오류 발생 시 오래된 항목을 제거하고 한 번 재시도
+- EPUB 책 메타데이터와 압축 archive Blob은 별도 record로 저장한다.
+- 장 source·번역 cache는 기본 최대 100MB 내에서 최근 사용 시각 기준 LRU 정리한다.
+- 새 EPUB 가져오기 전 `navigator.storage.estimate()`로 여유 공간을 검사하고, 사용자 동작에서 `navigator.storage.persist()`를 요청한다.
+- quota 부족 시 source·번역 cache만 정리할 수 있으며, EPUB archive와 책 메타데이터는 사용자 확인 없이 삭제하지 않는다. 필요한 공간을 확보하지 못하면 가져오기를 실패시킨다.
 - 원문 해시가 같은 번역은 만료 없이 재사용
 - 목차는 24시간 뒤 stale 처리하고 백그라운드 또는 사용자 진입 시 갱신
 - 전체 데이터 삭제 기능은 localStorage, IndexedDB, Cache Storage를 모두 비운다.
@@ -363,8 +411,8 @@ API Key는 사용자가 명시적으로 저장을 선택했을 때만 기록하�
 
 - Web App Manifest에 이름, 아이콘, 시작 URL, 테마 색상과 `display: standalone`을 설정한다.
 - Service Worker는 빌드 식별자가 포함된 앱 셸과 정적 자산만 캐시한다.
-- `/api/**`, Gemini API, 외부 e-book URL은 Service Worker 캐시 대상에서 제외한다.
-- 오프라인에서는 이미 IndexedDB에 저장된 번역만 읽을 수 있다.
+- `/api/**`, Gemini API, 외부 e-book URL과 API Key가 포함될 수 있는 요청은 Service Worker 캐시 대상에서 제외한다.
+- 오프라인에서는 IndexedDB의 EPUB archive 또는 저장된 장 원문을 다시 열 수 있고, cache된 번역만 표시할 수 있다.
 - 오프라인 상태에서 신규 URL을 열면 네트워크가 필요하다는 오류를 표시한다.
 - 새 Service Worker가 준비되면 사용자의 독서 흐름을 끊지 않는 시점에 갱신한다.
 
@@ -387,6 +435,7 @@ DNS 검증과 실제 연결 사이의 재바인딩 가능성도 고려하여 배
 
 ### 13.2 XSS와 콘텐츠 격리
 
+- EPUB archive는 브라우저 전용 파서가 중앙 디렉터리를 먼저 검사한 뒤에만 해제한다. 압축 파일·항목·비압축 총량·장·문단 한도를 넘는 입력은 처리하지 않는다.
 - 추출한 HTML 문자열을 React의 HTML 주입 API로 렌더링하지 않는다.
 - 파서에서 얻은 `textContent`만 데이터로 반환한다.
 - 외부 이미지, 스타일, iframe과 스크립트를 리더에 삽입하지 않는다.
@@ -410,6 +459,9 @@ type PublicErrorCode =
   | "SOURCE_UNREACHABLE"
   | "SOURCE_TOO_LARGE"
   | "EXTRACTION_FAILED"
+  | "INVALID_EPUB"
+  | "EPUB_TOO_LARGE"
+  | "EPUB_UNSUPPORTED"
   | "INVALID_API_KEY"
   | "MODEL_UNAVAILABLE"
   | "QUOTA_EXCEEDED"
@@ -428,6 +480,8 @@ type PublicErrorCode =
 - URL 정규화와 허용·차단 규칙
 - IPv4/IPv6 사설 주소 판별
 - 69shuba 장·목차 fixture 파싱
+- 합성 EPUB fixture의 컨테이너·OPF·spine·navigation·XHTML 파싱 및 local-epub locator
+- 손상 컨테이너, ZIP 폭탄 한도, XML/XHTML 오류, 빈 장과 잘못된 목차 거부
 - 문단 ID, 콘텐츠 해시와 번역 캐시 키
 - 문단 묶음 분할과 출력 계약 검증
 - 오류 코드 매핑과 LRU 정리
@@ -439,16 +493,17 @@ type PublicErrorCode =
 - 캐시 hit/miss와 프롬프트·모델 변경에 따른 무효화
 - Gemini 응답의 누락, 중복, `429`, 취소 처리
 - 전체 저장 데이터 삭제
+- EPUB library migration, 저장공간 부족, 오프라인 재열기와 local locator의 서버 API 거부
 
 외부 HTTP와 Gemini는 테스트 더블로 대체하며 실제 네트워크를 호출하지 않는다.
 
 ### E2E 테스트
 
-- API Key 설정 → URL 입력 → 번역 진행 → 리더 표시
+- API Key 설정 → EPUB 선택 → 번역 진행 → 리더 표시
 - 원문/번역문 보기 전환
 - 이전 장, 다음 장 및 내부 목차 이동
 - 재방문 시 캐시 사용
-- 오프라인에서 캐시된 장 열기
+- EPUB 첫 장 번역 → 다음 장·목차 이동 → 새로고침 후 cache 재사용 → 오프라인 재열기
 - 모바일 360px 레이아웃과 키보드 접근성
 
 ## 16. 관측성과 로그
@@ -456,6 +511,7 @@ type PublicErrorCode =
 - 서버 로그는 요청 ID, 사이트 ID, 결과 코드, 처리 시간과 응답 크기만 구조화해 남긴다.
 - 전체 원본 URL은 경로에 작품 ID가 포함될 수 있으므로 기본 로그에서 해시하거나 필요한 부분만 기록한다.
 - 원문, 번역문, 사용자 프롬프트, API Key는 기록하지 않는다.
+- EPUB 파일명, archive Blob과 EPUB에서 추출한 본문도 기록하지 않는다.
 - 클라이언트 오류 보고를 도입할 경우 사용자의 명시적 동의와 비밀값 제거를 선행한다.
 
 ## 17. 배포 고려사항
@@ -473,4 +529,4 @@ type PublicErrorCode =
 - 새 대상 언어: 프롬프트, 캐시 키와 UI 설정 확장
 - 서버 동기화: 향후 계정·DB가 도입되더라도 브라우저 저장 인터페이스 뒤에 추가
 
-MVP에서는 범용 사이트 자동 추출, 로그인 콘텐츠, 서버 번역, 서버 공유 캐시와 전체 책 일괄 번역으로 확장하지 않는다.
+MVP에서는 범용 사이트 자동 추출, 로그인 콘텐츠, 서버 번역, 서버 공유 캐시, EPUB 서버 업로드 및 전체 책 일괄 번역으로 확장하지 않는다.
