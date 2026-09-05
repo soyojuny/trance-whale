@@ -90,6 +90,7 @@ async function saveKeyAndOpen(page: Page) {
   await page.getByRole("button", { name: "변경사항 저장" }).click();
   await expect(page.getByText("저장됨 · 다음 장부터 적용")).toBeVisible();
   await page.getByRole("button", { name: "설정 닫기" }).click();
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await expect(page.getByRole("heading", { name: "제1화 산문" })).toBeVisible();
@@ -151,6 +152,7 @@ test("취소와 부분 실패 재시도가 성공한 문단을 버리지 않는�
   await page.getByRole("button", { name: "설정 닫기" }).click();
 
   boundaries.setTranslationMode("delayed");
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await page.getByRole("button", { name: "번역 취소" }).click();
@@ -172,6 +174,7 @@ test("부분 실패 재시도는 실패한 chunk만 Gemini에 다시 보낸다",
   await page.getByRole("button", { name: "설정 닫기" }).click();
 
   boundaries.setTranslationMode("blocked-once");
+  await page.getByRole("button", { name: "웹 페이지 가져오기" }).click();
   await page.getByLabel("웹소설 장 URL").fill(CHAPTER_ONE);
   await page.getByRole("button", { name: "번역해서 읽기" }).click();
   await expect(page.locator(".translation-failure")).toContainText("번역하지 못한 문단");
