@@ -7,7 +7,8 @@
       "name": "epub-contracts-and-parser",
       "status": "completed",
       "started_at": "2026-09-05T09:35:51+0900",
-      "summary": "브라우저 전용 ZIP 검사·EPUB parser와 local-epub 런타임 계약, 합성 2장 fixture 테스트를 추가했다."
+      "summary": "브라우저 전용 ZIP 검사·EPUB parser와 local-epub 런타임 계약, 합성 2장 fixture 테스트를 추가했다.",
+      "completed_at": "2026-09-05T09:46:01+0900"
     },
     {
       "step": 1,
