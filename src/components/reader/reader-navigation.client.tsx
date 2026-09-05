@@ -73,7 +73,7 @@ async function createDefaultRuntime(): Promise<ReaderNavigationRuntime> {
   const translationCache = createTranslationCache({ database });
   const sourceCache = createSourceCache({ database });
   const catalogCache = createCatalogCache({ database });
-  const localEpubLibrary = createLocalEpubLibrary({ database, sourceCache, catalogCache });
+  const localEpubLibrary = createLocalEpubLibrary({ database, catalogCache });
   const readerSession = createReaderSessionController({
     sourceClient,
     sourceCache,

@@ -27,7 +27,8 @@
     },
     {
       "dir": "6-local-epub-import",
-      "status": "pending"
+      "status": "blocked",
+      "blocked_at": "2026-09-05T21:50:54+0900"
     }
   ]
 }

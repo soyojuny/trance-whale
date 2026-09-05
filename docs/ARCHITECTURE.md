@@ -283,10 +283,11 @@ type TranslationCacheRecord = {
 사용자 파일 선택
   → archive 중앙 디렉터리·크기 한도 검사
   → mimetype / container.xml / OPF / spine / navigation 검증
-  → XHTML의 제목·텍스트 문단만 추출하고 content hash 계산
+  → XHTML 구조를 검증하고 목차·장 경로를 구성
   → storage estimate 및 persist 요청
-  → IndexedDB에 book metadata + archive Blob + 장 source 저장
+  → IndexedDB에 book metadata + archive bytes + 목차 + 장 경로만 저장
   → /read?book={bookId}&chapter={index}
+  → 장을 열 때 archive에서 해당 XHTML만 추출하고 content hash 계산
   → 번역 캐시 키 계산
   ├─ cache hit  → IndexedDB 번역문 표시
   └─ cache miss → 본문 분할 → Gemini 요청 → 묶음별 검증/표시/저장
@@ -399,7 +400,7 @@ API Key는 사용자가 명시적으로 저장을 선택했을 때만 기록하�
 
 ### IndexedDB
 
-- EPUB 책 메타데이터와 압축 archive Blob은 별도 record로 저장한다.
+- EPUB 책 메타데이터와 압축 archive의 256KB 이하 Base64 조각·정규화된 장 경로는 별도 record로 저장한다. 장 원문은 저장하지 않으며, 저장된 archive 조각을 결합해 요청한 장만 다시 추출한다.
 - 장 source·번역 cache는 기본 최대 100MB 내에서 최근 사용 시각 기준 LRU 정리한다.
 - 새 EPUB 가져오기 전 `navigator.storage.estimate()`로 여유 공간을 검사하고, 사용자 동작에서 `navigator.storage.persist()`를 요청한다.
 - quota 부족 시 source·번역 cache만 정리할 수 있으며, EPUB archive와 책 메타데이터는 사용자 확인 없이 삭제하지 않는다. 필요한 공간을 확보하지 못하면 가져오기를 실패시킨다.

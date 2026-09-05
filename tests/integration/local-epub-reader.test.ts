@@ -2,12 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createLocalEpubLocator } from "../../src/lib/epub/locator.client";
 import { createReaderSessionController } from "../../src/lib/reader/session.client";
-import { createCatalogCache } from "../../src/services/catalog-cache.client";
-import { createLocalEpubLibrary } from "../../src/services/local-epub-library.client";
 import type { ReaderDatabase, ReaderDbStore, ReaderDbStoreName } from "../../src/services/reader-db.client";
 import { createSourceCache } from "../../src/services/source-cache.client";
 import type { ChapterSource } from "../../src/types/source";
-import type { LocalEpubBook } from "../../src/types/epub";
 
 const BOOK_ID = "a".repeat(64);
 const IMPORTED_AT = "2026-09-05T00:00:00.000Z";
@@ -43,35 +40,18 @@ const chapter: ChapterSource = {
   paragraphs: [{ id: "paragraph-1", text: "local text" }], navigation: {}, contentHash: "b".repeat(64), fetchedAt: IMPORTED_AT,
 };
 
-const book: LocalEpubBook = {
-  id: BOOK_ID, title: "Synthetic book", sourceByteSize: 5, importedAt: IMPORTED_AT,
-  chapters: [{ index: 0, canonicalUrl: LOCATOR, title: "First chapter" }],
-};
-
 describe("local EPUB reader integration", () => {
-  it("reopens an imported chapter offline without calling the source API or Gemini", async () => {
+  it("opens an extracted local chapter offline without calling the source API or Gemini", async () => {
     const database = new MemoryDatabase();
     const sourceCache = createSourceCache({ database, now: () => IMPORTED_AT });
-    const library = createLocalEpubLibrary({
-      database,
-      sourceCache,
-      catalogCache: createCatalogCache({ database, now: () => IMPORTED_AT }),
-      storage: { estimate: async () => ({ usage: 0, quota: 100 }), persist: async () => true },
-    });
-    await expect(library.import({
-      archive: new Blob(["epub!"]), book, chapters: [chapter],
-      catalog: {
-        kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
-        bookTitle: book.title, chapters: [{ id: "chapter-0", url: LOCATOR, title: chapter.chapterTitle, sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
-      },
-    })).resolves.toEqual({ ok: true, book });
+    const openChapter = vi.fn(async () => ({ status: "hit" as const, chapter }));
 
     const fetchChapter = vi.fn();
     const execute = vi.fn();
     const controller = createReaderSessionController({
       sourceClient: { fetchChapter, fetchCatalog: vi.fn() },
       sourceCache,
-      localEpubLibrary: library,
+      localEpubLibrary: { openChapter },
       networkAvailable: () => false,
       preparePipeline: async () => ({
         cacheKey: "cache-key",
@@ -91,6 +71,7 @@ describe("local EPUB reader integration", () => {
 
     expect(fetchChapter).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
+    expect(openChapter).toHaveBeenCalledWith(BOOK_ID, 0);
     expect(controller.getState()).toMatchObject({ status: "complete", chapter });
   });
 });

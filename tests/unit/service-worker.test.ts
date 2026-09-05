@@ -12,7 +12,10 @@ import {
   installAppShell,
   shouldHandleRequest,
 } from "../../src/lib/pwa/service-worker";
-import { registerServiceWorker } from "../../src/services/service-worker-registration.client";
+import {
+  registerServiceWorker,
+  shouldRegisterServiceWorker,
+} from "../../src/services/service-worker-registration.client";
 
 function request(url: string, init?: RequestInit) {
   return new Request(url, init);
@@ -87,5 +90,11 @@ describe("service worker cache boundary", () => {
 
     expect(serviceWorker.register).toHaveBeenCalledWith("/sw.js", { scope: "/" });
     expect(registration.waiting.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("registers only in production so development does not serve stale app bundles", () => {
+    expect(shouldRegisterServiceWorker("production")).toBe(true);
+    expect(shouldRegisterServiceWorker("development")).toBe(false);
+    expect(shouldRegisterServiceWorker("test")).toBe(false);
   });
 });

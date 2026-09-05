@@ -13,7 +13,6 @@ import { createLocalDataService, type LocalDataResetResult } from "../services/l
 import { createLocalEpubLibrary } from "../services/local-epub-library.client";
 import { createPreferencesService, type Preferences, type StorageResult } from "../services/preferences.client";
 import { openReaderDatabase } from "../services/reader-db.client";
-import { createSourceCache } from "../services/source-cache.client";
 import {
   DEFAULT_READER_SETTINGS,
   DEFAULT_TRANSLATION_SETTINGS,
@@ -54,17 +53,16 @@ function readerHref(url: string): string {
   return `/read?url=${encodeURIComponent(url)}`;
 }
 
-async function importLocalEpub(file: File): Promise<EpubImportResult> {
+export async function importLocalEpub(file: File): Promise<EpubImportResult> {
   let database: Awaited<ReturnType<typeof openReaderDatabase>> | undefined;
   try {
     const parsed = await parseEpub(file);
     database = await openReaderDatabase();
     const library = createLocalEpubLibrary({
       database,
-      sourceCache: createSourceCache({ database }),
       catalogCache: createCatalogCache({ database }),
     });
-    return library.import({ archive: file, ...parsed });
+    return await library.import({ archive: file, ...parsed });
   } catch (error) {
     return { ok: false, error: toPublicError(error) };
   } finally {

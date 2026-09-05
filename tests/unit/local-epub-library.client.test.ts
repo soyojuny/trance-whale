@@ -49,47 +49,90 @@ function book(): LocalEpubBook {
   };
 }
 
+function epubArchive(): Blob {
+  const bytes = new TextEncoder().encode("epub!");
+  const archive = new Blob([bytes], { type: "application/epub+zip" });
+  Object.defineProperty(archive, "arrayBuffer", {
+    value: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  return archive;
+}
+
 describe("local EPUB library", () => {
-  it("stores metadata and archive independently, then reopens a source-cache chapter", async () => {
+  it("stores metadata, archive, and chapter paths without persisting source chapters", async () => {
     const database = new MemoryDatabase();
-    const sourceCache = {
-      put: vi.fn(async () => ({ status: "stored" as const })),
-      get: vi.fn(async () => ({ status: "hit" as const, chapter: chapter() })),
-    };
     const catalogCache = { put: vi.fn(async () => undefined) };
     const persist = vi.fn(async () => true);
     const library = createLocalEpubLibrary({
-      database, sourceCache, catalogCache,
-      storage: { estimate: async () => ({ usage: 10, quota: 100 }), persist },
+      database, catalogCache,
+      storage: { estimate: async () => ({ usage: 10, quota: 10_000 }), persist },
     });
-    const archive = new Blob(["epub!"], { type: "application/epub+zip" });
+    const archive = epubArchive();
 
-    await expect(library.import({ archive, book: book(), chapters: [chapter()], catalog: {
+    await expect(library.import({ archive, book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
     } })).resolves.toEqual({ ok: true, book: book() });
 
     expect(database.values.get("local-epub-books")?.get(BOOK_ID)).toEqual(book());
-    expect(database.values.get("local-epub-archives")?.get(BOOK_ID)).toMatchObject({ bookId: BOOK_ID, archive });
-    expect(sourceCache.put).toHaveBeenCalledWith(chapter());
+    expect(database.values.get("local-epub-archives")?.get(BOOK_ID)).toEqual({
+      bookId: BOOK_ID, byteSize: archive.size, chunkCount: 1, chapterPaths: ["OPS/text/chapter-1.xhtml"],
+    });
+    expect(database.values.get("local-epub-archive-chunks")?.get(`${BOOK_ID}:0`)).toMatchObject({
+      bookId: BOOK_ID, index: 0, encodedBytes: expect.any(String),
+    });
+    expect((await library.getArchive(BOOK_ID))?.size).toBe(archive.size);
     expect(persist).toHaveBeenCalledOnce();
-    await expect(library.openChapter(BOOK_ID, 0)).resolves.toEqual({ status: "hit", chapter: chapter() });
   });
 
   it("fails before writing or deleting books when the archive does not fit", async () => {
     const database = new MemoryDatabase();
-    const sourceCache = { put: vi.fn(), get: vi.fn() };
     const library = createLocalEpubLibrary({
-      database, sourceCache, catalogCache: { put: vi.fn() },
+      database, catalogCache: { put: vi.fn() },
       storage: { estimate: async () => ({ usage: 98, quota: 100 }), persist: async () => false },
     });
 
-    await expect(library.import({ archive: new Blob(["epub!"], { type: "application/epub+zip" }), book: book(), chapters: [chapter()], catalog: {
+    const result = await library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
-    } })).resolves.toEqual({ ok: false, error: expect.objectContaining({ code: "STORAGE_FULL" }) });
+    } });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "STORAGE_FULL", message: expect.stringContaining("필요한 공간") } });
 
     expect(database.values.size).toBe(0);
-    expect(sourceCache.put).not.toHaveBeenCalled();
+  });
+
+  it("continues importing when storage estimation or persistence requests are unavailable", async () => {
+    const database = new MemoryDatabase();
+    const library = createLocalEpubLibrary({
+      database,
+      catalogCache: { put: vi.fn(async () => undefined) },
+      storage: {
+        estimate: vi.fn(async () => { throw new Error("unsupported"); }),
+        persist: vi.fn(async () => { throw new Error("denied"); }),
+      },
+    });
+
+    await expect(library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+      kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
+      bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
+    } })).resolves.toEqual({ ok: true, book: book() });
+  });
+
+  it("identifies the failed local storage record without exposing the exception", async () => {
+    const database = new MemoryDatabase();
+    const library = createLocalEpubLibrary({
+      database,
+      catalogCache: { put: vi.fn(async () => { throw new Error("private detail"); }) },
+      storage: { estimate: async () => ({ usage: 0, quota: 10_000 }), persist: async () => true },
+    });
+
+    const result = await library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+      kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
+      bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
+    } });
+
+    expect(result).toMatchObject({ ok: false, error: { code: "STORAGE_FULL", message: expect.stringContaining("목차") } });
+    expect(JSON.stringify(result)).not.toContain("private detail");
   });
 });

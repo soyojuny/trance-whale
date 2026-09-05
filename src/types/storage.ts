@@ -100,7 +100,18 @@ export const SourceCacheRecordSchema = z
 export const LocalEpubArchiveRecordSchema = z
   .object({
     bookId: sha256Schema,
-    archive: z.instanceof(Blob),
+    byteSize: z.number().int().positive(),
+    chunkCount: z.number().int().positive(),
+    chapterPaths: z.array(z.string().min(1)).min(1),
+  })
+  .strict();
+
+export const LocalEpubArchiveChunkRecordSchema = z
+  .object({
+    id: z.string().min(1),
+    bookId: sha256Schema,
+    index: z.number().int().nonnegative(),
+    encodedBytes: z.string().min(1),
   })
   .strict();
 
@@ -125,3 +136,4 @@ export type CatalogCacheRecord = z.infer<typeof CatalogCacheRecordSchema>;
 export type SourceCacheRecord = z.infer<typeof SourceCacheRecordSchema>;
 export type LocalEpubBookRecord = z.infer<typeof LocalEpubBookSchema>;
 export type LocalEpubArchiveRecord = z.infer<typeof LocalEpubArchiveRecordSchema>;
+export type LocalEpubArchiveChunkRecord = z.infer<typeof LocalEpubArchiveChunkRecordSchema>;

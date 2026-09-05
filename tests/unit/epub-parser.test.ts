@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EpubParserError, parseEpub } from "../../src/lib/epub/parse-epub.client";
+import { EPUB_LIMITS, EpubParserError, parseEpub, parseStoredEpubChapter } from "../../src/lib/epub/parse-epub.client";
 import { syntheticEpubFixture } from "../fixtures/epub/synthetic-epub";
 import { strToU8 } from "fflate";
 
@@ -36,7 +36,19 @@ describe("browser EPUB parser", () => {
       { title: "첫 항해", sourceIndex: 0 },
       { title: "둘째 항해", sourceIndex: 1 },
     ]);
+    expect(parsed.chapterPaths).toEqual(["OPS/text/chapter-1.xhtml", "OPS/text/chapter-2.xhtml"]);
     expect(JSON.stringify(parsed)).not.toMatch(/<script|<style|<iframe|onclick=/i);
+  });
+
+  it("extracts one stored EPUB chapter without rebuilding the book", async () => {
+    const file = syntheticEpubFixture();
+    const parsed = await parseEpub(file, { importedAt });
+
+    await expect(parseStoredEpubChapter(file, parsed.book, 1, parsed.chapterPaths[1], importedAt)).resolves.toMatchObject({
+      chapterNumber: 2,
+      chapterTitle: "둘째 항해",
+      paragraphs: [{ id: "paragraph-1", text: "배는 항구를 떠났다." }],
+    });
   });
 
   it("rejects a damaged container and central-directory limits before extraction", async () => {
@@ -44,9 +56,27 @@ describe("browser EPUB parser", () => {
     await expectEpubFailure(syntheticEpubFixture(), "ZIP_LIMIT", { limits: { maxEntries: 1 } });
   });
 
+  it("accepts long serializations up to 2,000 chapters and rejects larger ones", async () => {
+    const parsed = await parseEpub(syntheticEpubFixture({ chapterCount: 1_500 }), { importedAt });
+
+    expect(parsed.chapters).toHaveLength(1_500);
+    await expectEpubFailure(syntheticEpubFixture({ chapterCount: 2_001 }), "ZIP_LIMIT");
+  }, 30_000);
+
+  it("supports up to 300,000 paragraphs across a long EPUB", () => {
+    expect(EPUB_LIMITS.maxTotalParagraphs).toBe(300_000);
+  });
+
+  it("skips cover, navigation, and volume documents in the EPUB spine", async () => {
+    const parsed = await parseEpub(syntheticEpubFixture({ structuralSpineItems: true }), { importedAt });
+
+    expect(parsed.chapters.map((chapter) => chapter.chapterTitle)).toEqual(["첫 항해", "둘째 항해"]);
+    expect(parsed.catalog.chapters.map((chapter) => chapter.title)).toEqual(["첫 항해", "둘째 항해"]);
+  });
+
   it("rejects malformed XHTML, empty chapters, and invalid navigation", async () => {
     await expectEpubFailure(syntheticEpubFixture({ chapterOne: "<html><body><p>broken</body>" }), "INVALID_XHTML");
-    await expectEpubFailure(syntheticEpubFixture({ chapterOne: "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>빈 장</h1></body></html>" }), "EMPTY_CHAPTER");
+    await expectEpubFailure(syntheticEpubFixture({ chapterOne: "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body/></html>" }), "EMPTY_CHAPTER");
     await expectEpubFailure(syntheticEpubFixture({ navigation: "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><nav><a href=\"missing.xhtml\">없는 장</a></nav></body></html>" }), "INVALID_TOC");
   });
 

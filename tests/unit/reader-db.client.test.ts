@@ -148,6 +148,10 @@ describe("reader database adapter", () => {
       [READER_DB_SCHEMA.stores.sources.name, { keyPath: "canonicalUrl", indexes: [] }],
       [READER_DB_SCHEMA.stores.epubBooks.name, { keyPath: "id", indexes: [] }],
       [READER_DB_SCHEMA.stores.epubArchives.name, { keyPath: "bookId", indexes: [] }],
+      [READER_DB_SCHEMA.stores.epubArchiveChunks.name, {
+        keyPath: "id",
+        indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
+      }],
     ]);
     second.close();
   });
@@ -202,6 +206,43 @@ describe("reader database adapter", () => {
     expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchives.name)).toEqual({
       keyPath: "bookId",
       indexes: [],
+    });
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchiveChunks.name)).toEqual({
+      keyPath: "id",
+      indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
+    });
+  });
+
+  it("repairs version 4 databases that were created before the archive chunk store", async () => {
+    const factory = new FakeFactory();
+    factory.database.version = 4;
+    factory.database.stores.set(READER_DB_SCHEMA.stores.translations.name, {
+      keyPath: "cacheKey",
+      indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.catalogs.name, {
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.sources.name, {
+      keyPath: "canonicalUrl",
+      indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.epubBooks.name, {
+      keyPath: "id",
+      indexes: [],
+    });
+    factory.database.stores.set(READER_DB_SCHEMA.stores.epubArchives.name, {
+      keyPath: "bookId",
+      indexes: [],
+    });
+
+    await openReaderDatabase(factory);
+
+    expect(factory.upgrades).toBe(1);
+    expect(factory.database.stores.get(READER_DB_SCHEMA.stores.epubArchiveChunks.name)).toEqual({
+      keyPath: "id",
+      indexes: [READER_DB_SCHEMA.stores.epubArchiveChunks.indexes.bookId],
     });
   });
 

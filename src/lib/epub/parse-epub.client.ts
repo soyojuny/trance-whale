@@ -14,12 +14,12 @@ import { createLocalEpubLocator } from "./locator.client";
 
 export const EPUB_LIMITS = {
   maxArchiveBytes: 25 * 1024 * 1024,
-  maxEntries: 1_000,
+  maxEntries: 2_500,
   maxEntryUncompressedBytes: 5 * 1024 * 1024,
   maxTotalUncompressedBytes: 50 * 1024 * 1024,
-  maxChapters: 1_000,
+  maxChapters: 2_000,
   maxParagraphsPerChapter: 10_000,
-  maxTotalParagraphs: 100_000,
+  maxTotalParagraphs: 300_000,
 } as const;
 
 type EpubLimits = { [Limit in keyof typeof EPUB_LIMITS]: number };
@@ -59,10 +59,19 @@ type PackageItem = {
   properties: string;
 };
 
+type ParsedTextChapter = {
+  title: string;
+  paragraphs: Array<{ id: string; text: string }>;
+  contentHash: Promise<string>;
+};
+
+type ParsedStructuralDocument = { kind: "structural" };
+
 export type ParsedEpub = {
   book: LocalEpubBook;
   chapters: ChapterSource[];
   catalog: CatalogSource;
+  chapterPaths: string[];
 };
 
 export type ParseEpubOptions = {
@@ -304,7 +313,14 @@ function parsePackage(bytes: Uint8Array, entries: Map<string, ZipEntry>, opfPath
   };
 }
 
-function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string): { title: string; paragraphs: Array<{ id: string; text: string }>; contentHash: Promise<string> } {
+function isCoverDocument(document: XMLDocument, item: PackageItem): boolean {
+  return item.properties.split(/\s+/).includes("cover-image")
+    || /(?:^|[-_])cover(?:[-_]|$)/i.test(item.id)
+    || /(?:^|[-_])cover(?:[-_]|$)/i.test(item.path)
+    || elementsByName(document, "div").some((element) => element.getAttribute("id") === "cover");
+}
+
+function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string, item: PackageItem): ParsedTextChapter | ParsedStructuralDocument {
   const documentBytes = extractEntry(bytes, entry);
   const document = parseXml(new TextDecoder().decode(documentBytes), "INVALID_XHTML");
   const paragraphs = elementsByName(document, "p")
@@ -312,26 +328,39 @@ function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string)
     .filter((paragraph): paragraph is string => Boolean(paragraph))
     .map((text, index) => ({ id: `paragraph-${index + 1}`, text }));
   if (paragraphs.length === 0) {
-    if (elementsByName(document, "img").length > 0) throw new EpubParserError("IMAGE_BASED");
+    if (elementsByName(document, "img").length > 0) {
+      if (isCoverDocument(document, item)) return { kind: "structural" };
+      throw new EpubParserError("IMAGE_BASED");
+    }
+    if (textContent(elementsByName(document, "h1")[0])) return { kind: "structural" };
     throw new EpubParserError("EMPTY_CHAPTER");
   }
   const title = textContent(elementsByName(document, "h1")[0]) ?? textContent(elementsByName(document, "title")[0]) ?? fallbackTitle;
   return { title, paragraphs, contentHash: sha256(documentBytes) };
 }
 
-function navigationTitles(bytes: Uint8Array, entries: Map<string, ZipEntry>, nav: PackageItem | undefined, spine: PackageItem[]): Map<string, string> {
+function navigationTitles(
+  bytes: Uint8Array,
+  entries: Map<string, ZipEntry>,
+  nav: PackageItem | undefined,
+  spine: PackageItem[],
+  readableSpinePaths: Set<string>,
+): Map<string, string> {
   if (!nav) return new Map();
   const document = parseXml(new TextDecoder().decode(extractEntry(bytes, requiredEntry(entries, nav.path, "INVALID_TOC"))), "INVALID_TOC");
   const anchors = elementsByName(document, "a");
   if (anchors.length === 0) throw new EpubParserError("INVALID_TOC");
   const spinePaths = new Set(spine.map((item) => item.path));
+  const linkedPaths = new Set<string>();
   const titles = new Map<string, string>();
   for (const anchor of anchors) {
     const href = anchor.getAttribute("href");
     const title = textContent(anchor);
     if (!href || !title) throw new EpubParserError("INVALID_TOC");
     const path = resolveArchivePath(nav.path, href, "INVALID_TOC");
-    if (!spinePaths.has(path) || titles.has(path)) throw new EpubParserError("INVALID_TOC");
+    if (!spinePaths.has(path) || linkedPaths.has(path)) throw new EpubParserError("INVALID_TOC");
+    linkedPaths.add(path);
+    if (!readableSpinePaths.has(path)) continue;
     titles.set(path, title);
   }
   return titles;
@@ -347,10 +376,25 @@ export async function parseEpub(file: Blob, options: ParseEpubOptions = {}): Pro
   const packageData = parsePackage(bytes, entries, opfPath);
   if (packageData.spine.length > limits.maxChapters) throw new EpubParserError("ZIP_LIMIT");
   const bookId = await sha256(bytes);
-  const tocTitles = navigationTitles(bytes, entries, packageData.nav, packageData.spine);
+  const parsedSpine = packageData.spine
+    .filter((item) => item !== packageData.nav)
+    .map((item) => ({
+      item,
+      parsed: parseChapter(bytes, requiredEntry(entries, item.path, "INVALID_XHTML"), "", item),
+    }));
+  const readableSpine = parsedSpine.filter((entry): entry is { item: PackageItem; parsed: ParsedTextChapter } => !("kind" in entry.parsed));
+  if (readableSpine.length === 0) {
+    throw new EpubParserError("EMPTY_CHAPTER");
+  }
+  const tocTitles = navigationTitles(
+    bytes,
+    entries,
+    packageData.nav,
+    packageData.spine,
+    new Set(readableSpine.map((entry) => entry.item.path)),
+  );
   const importedAt = options.importedAt ?? new Date().toISOString();
-  const chapters: ChapterSource[] = await Promise.all(packageData.spine.map(async (item, index) => {
-    const parsed = parseChapter(bytes, requiredEntry(entries, item.path, "INVALID_XHTML"), `Chapter ${index + 1}`);
+  const chapters: ChapterSource[] = await Promise.all(readableSpine.map(async ({ item, parsed }, index) => {
     if (parsed.paragraphs.length > limits.maxParagraphsPerChapter) throw new EpubParserError("ZIP_LIMIT");
     const locator = createLocalEpubLocator(bookId, index);
     return LocalEpubChapterSchema.parse({
@@ -379,5 +423,56 @@ export async function parseEpub(file: Blob, options: ParseEpubOptions = {}): Pro
     chapters: book.chapters.map((chapter) => ({ id: `chapter-${chapter.index}`, url: chapter.canonicalUrl, title: chapter.title, number: chapter.index + 1, sourceIndex: chapter.index })),
     fetchedAt: importedAt,
   });
-  return { book, chapters, catalog };
+  return { book, chapters, catalog, chapterPaths: readableSpine.map((entry) => entry.item.path) };
+}
+
+export async function parseStoredEpubChapter(
+  file: Blob,
+  bookInput: LocalEpubBook,
+  index: number,
+  chapterPath: string,
+  fetchedAt = new Date().toISOString(),
+): Promise<ChapterSource> {
+  const book = LocalEpubBookSchema.parse(bookInput);
+  const metadata = book.chapters[index];
+  if (!metadata || metadata.index !== index || metadata.canonicalUrl !== createLocalEpubLocator(book.id, index)) {
+    throw new EpubParserError("INVALID_CONTAINER");
+  }
+  if (file.size !== book.sourceByteSize || file.size === 0 || file.size > EPUB_LIMITS.maxArchiveBytes) {
+    throw new EpubParserError("ZIP_LIMIT");
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (await sha256(bytes) !== book.id) throw new EpubParserError("INVALID_CONTAINER");
+  const entries = inspectCentralDirectory(bytes, EPUB_LIMITS);
+  if (entries.has("META-INF/encryption.xml")) throw new EpubParserError("DRM_PROTECTED");
+  const packageData = parsePackage(bytes, entries, parseContainer(bytes, entries));
+  if (packageData.spine.length > EPUB_LIMITS.maxChapters) throw new EpubParserError("ZIP_LIMIT");
+  const item = packageData.spine.find((candidate) => candidate.path === chapterPath);
+  if (!item || item === packageData.nav) throw new EpubParserError("INVALID_CONTAINER");
+
+  const parsed = parseChapter(bytes, requiredEntry(entries, item.path, "INVALID_XHTML"), `Chapter ${index + 1}`, item);
+  if ("kind" in parsed || parsed.paragraphs.length > EPUB_LIMITS.maxParagraphsPerChapter) {
+    throw new EpubParserError("INVALID_XHTML");
+  }
+
+  return LocalEpubChapterSchema.parse({
+    kind: "chapter",
+    sourceUrl: metadata.canonicalUrl,
+    canonicalUrl: metadata.canonicalUrl,
+    siteId: "local-epub",
+    bookId: book.id,
+    bookTitle: book.title,
+    chapterId: `chapter-${index}`,
+    chapterNumber: index + 1,
+    chapterTitle: metadata.title,
+    paragraphs: parsed.paragraphs,
+    navigation: {
+      previous: index > 0 ? { url: createLocalEpubLocator(book.id, index - 1) } : undefined,
+      catalog: { url: createLocalEpubLocator(book.id, 0) },
+      next: index < book.chapters.length - 1 ? { url: createLocalEpubLocator(book.id, index + 1) } : undefined,
+    },
+    contentHash: await parsed.contentHash,
+    fetchedAt,
+  });
 }

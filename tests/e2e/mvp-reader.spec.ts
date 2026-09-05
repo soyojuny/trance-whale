@@ -183,7 +183,7 @@ test("합성 EPUB을 기기에서 번역·탐색하고 reload 및 offline에서 
   const storage = await localEpubStorage(page);
   expect(storage.books).toHaveLength(1);
   expect(storage.archives).toHaveLength(1);
-  expect(storage.sources).toHaveLength(2);
+  expect(storage.sources).toHaveLength(0);
   expect(storage.translations).toHaveLength(2);
   expect(JSON.stringify({ books: storage.books, archives: storage.archives })).not.toContain(EPUB_FILENAME);
   expect(JSON.stringify(storage)).not.toContain(EPUB_API_KEY);
