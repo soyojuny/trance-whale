@@ -4,7 +4,7 @@ import {
   APP_SHELL_PATH,
   PRECACHE_PATHS,
   SENSITIVE_REQUEST_HEADERS,
-} from "./config";
+} from "./config.server";
 
 type CacheLike = {
   addAll(requests: readonly string[]): Promise<void>;

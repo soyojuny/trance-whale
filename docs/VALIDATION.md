@@ -22,7 +22,7 @@
 | 문단 대응과 순차 표시 | `tests/unit/translation-output.test.ts`, `translation-orchestrator.test.ts`, `reader-view.test.tsx`; `tests/integration/client-translation-pipeline.test.ts` | FR-03·06·07, AC 4·5·6 |
 | cache hit/miss 및 무효화 | `tests/integration/cached-translation-pipeline.test.ts`, `client-translation-pipeline.test.ts`; `tests/unit/translation-cache-key.test.ts`, `source-cache.client.test.ts` | FR-08, AC 8·10·16 |
 | 웹 내부 navigation·목차·읽기 위치 | `tests/integration/reader-navigation.test.tsx`, `tests/unit/catalog-sheet.test.tsx`, `catalog-session.client.test.ts` | FR-06·06-1, AC 14 |
-| PWA와 저장소 경계 | `tests/unit/pwa-manifest.test.ts`, `service-worker.test.ts`, `pwa-install-prompt.test.tsx`, `tests/integration/local-data-reset.test.ts` | FR-05·08·09, AC 11·12·15 |
+| PWA와 저장소 경계 | `tests/unit/pwa-manifest.test.ts`, `service-worker.test.ts`, `pwa-install-prompt.test.tsx`, `client-boundary-policy.test.ts`, `npm run check:boundaries`, `tests/integration/local-data-reset.test.ts` | FR-05·08·09, AC 11·12·15 |
 | 기존 360px 웹 흐름 | `tests/e2e/mvp-reader.spec.ts`의 cache 복원·overflow·44px 도구막대·키보드 사례 | NFR 접근성, EPUB 흐름 추가 필요 |
 
 ## 개발·통합 회귀 방지 기준
@@ -49,6 +49,11 @@
 - 모바일 홈에서 Android Chromium은 `beforeinstallprompt`가 발생한 경우에만 `앱 설치` 버튼을 표시하고, iOS Safari는 `공유 메뉴 → 홈 화면에 추가` 안내를 표시한다. 설치된 상태에서는 설치 안내를 숨긴다.
 - `tests/unit/pwa-install-prompt.test.tsx`는 지연된 설치 prompt, iOS Safari 안내, 설치 완료 후 숨김을 검증했고 `npm run typecheck`와 `npm run lint`도 통과했다.
 - Playwright 실행은 이 환경의 Next.js web server가 CSS 처리 중 포트를 열 수 없어 시작하지 못했다(`Operation not permitted`). 따라서 360px 실기기에서 Android 설치 prompt와 iOS Safari 안내의 시각·상호작용 확인은 배포 환경에서 다시 수행한다.
+
+### Client/server 경계 확인 (2026-09-06)
+
+- `npm run check:boundaries`는 Client Component 또는 `.client.*`의 `.server.*` import, `.server.*` 접미사가 없는 `server-only` 모듈, 서버 외 모듈의 비공개 환경변수 읽기를 거부한다. 이 검사는 `npm run lint`에 포함된다.
+- `tests/unit/client-boundary-policy.test.ts`와 `local-data-client-boundary.test.ts`는 각각 정책 위반과 production 브라우저 import graph에서 build 전용 환경변수가 없는 경우를 검증한다.
 
 ## 인수 조건 추적
 

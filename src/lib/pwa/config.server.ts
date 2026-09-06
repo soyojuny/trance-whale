@@ -1,3 +1,5 @@
+import "server-only";
+
 import { APP_CACHE_STORAGE_PREFIX } from "./cache-constants";
 
 export { APP_CACHE_STORAGE_PREFIX } from "./cache-constants";

@@ -22,6 +22,8 @@
 - Server Component를 기본으로 사용하고, 브라우저 API나 사용자 상호작용이 필요한 부분만 Client Component로 만든다.
 - API Route와 서버 전용 모듈에는 `server-only` 경계를 적용한다.
 - 브라우저 전용 저장소와 Gemini 클라이언트에는 `client-only` 경계를 적용한다.
+- CRITICAL: `NEXT_PUBLIC_*` 또는 `NODE_ENV` 이외의 환경변수는 `.server.*` 파일에서만 읽고 `server-only`를 선언한다. Vercel의 Build Command 변수는 브라우저 런타임에 존재하지 않으므로 Client Component나 `.client.*` import graph에서 읽지 않는다.
+- CRITICAL: 서버 설정에서 클라이언트도 필요한 상수가 있으면 환경변수·Node API·`server-only` import가 없는 별도 순수 모듈로 분리한다. 서버 설정 모듈을 재수출하거나 Client Component에서 간접 import하지 않는다.
 - 사이트별 DOM 선택자와 파싱 규칙은 `src/lib/extractors/`의 어댑터 내부에만 둔다.
 - 지원 사이트 추가 시 공통 추출 인터페이스를 구현하고 fixture 기반 계약 테스트를 함께 추가한다.
 - 외부 경계의 입력과 응답은 런타임 스키마로 검증한다.
@@ -51,6 +53,7 @@
 - 파서와 캐시 키 생성기는 가능한 한 순수 함수로 작성한다.
 - 변경 후 관련 단위 테스트, 타입 검사, lint를 실행한다. 사용자 흐름 변경 시 Playwright 테스트도 실행한다.
 - 보안 관련 코드(URL 검증, 리다이렉트, HTML 추출, 비밀값 처리)는 정상 사례와 거부 사례를 모두 테스트한다.
+- Client Component, `.client.*`, `.server.*`, Route Handler 또는 build 환경변수를 변경할 때는 `npm run lint`의 client/server boundary 검사를 실행하고, production에서 필요한 build 변수가 없는 브라우저 import graph를 직접 불러오는 회귀 테스트를 추가한다.
 - 문서와 구현이 달라지면 같은 변경에서 문서도 갱신한다.
 - 커밋 메시지는 conventional commits 형식을 따른다(`feat:`, `fix:`, `docs:`, `refactor:`, `test:`).
 

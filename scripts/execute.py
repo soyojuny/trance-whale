@@ -230,11 +230,12 @@ class StepExecutor:
             f"2. 이 step에 명시된 작업만 수행하라. 추가 기능이나 파일을 만들지 마라.\n"
             f"3. 기존 테스트를 깨뜨리지 마라.\n"
             f"4. AC(Acceptance Criteria) 검증을 직접 실행하라.\n"
-            f"5. /phases/{self._phase_dir_name}/index.json의 해당 step status를 업데이트하라:\n"
+            f"5. Client Component, `.client.*`, `.server.*`, Route Handler 또는 build 환경변수를 변경하면 `npm run check:boundaries`를 실행하고, production 브라우저 import graph에 build 전용 환경변수가 없는 회귀 테스트를 추가하라.\n"
+            f"6. /phases/{self._phase_dir_name}/index.json의 해당 step status를 업데이트하라:\n"
             f"   - AC 통과 → \"completed\" + \"summary\" 필드에 이 step의 산출물을 한 줄로 요약\n"
             f"   - {self.MAX_RETRIES}회 수정 시도 후에도 실패 → \"error\" + \"error_message\" 기록\n"
             f"   - 사용자 개입이 필요한 경우 (API 키, 인증, 수동 설정 등) → \"blocked\" + \"blocked_reason\" 기록 후 즉시 중단\n"
-            f"6. 모든 변경사항을 커밋하라:\n"
+            f"7. 모든 변경사항을 커밋하라:\n"
             f"   {commit_example}\n\n---\n\n"
         )
 

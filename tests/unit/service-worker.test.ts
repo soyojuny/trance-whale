@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("server-only", () => ({}));
+
 import {
   APP_CACHE_STORAGE_PREFIX,
   APP_SHELL_CACHE_NAME,
@@ -7,7 +9,7 @@ import {
   createAppShellCacheName,
   PRECACHE_PATHS,
   resolveAppShellBuildId,
-} from "../../src/lib/pwa/config";
+} from "../../src/lib/pwa/config.server";
 import {
   activateAppShell,
   fetchAppShell,

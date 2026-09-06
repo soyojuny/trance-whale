@@ -6,7 +6,8 @@
     "dev": "next dev",
     "start": "next start",
     "build": "next build",
-    "lint": "eslint .",
+    "lint": "npm run check:boundaries && eslint .",
+    "check:boundaries": "node scripts/check-client-boundaries.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test"
