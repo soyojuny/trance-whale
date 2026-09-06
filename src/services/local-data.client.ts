@@ -3,9 +3,9 @@ import "client-only";
 import type { PublicError } from "../lib/errors";
 import { createPreferencesService, type StorageResult } from "./preferences.client";
 import { READER_DB_SCHEMA } from "./reader-db.client";
-import { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/config";
+import { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/cache-constants";
 
-export { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/config";
+export { APP_CACHE_STORAGE_PREFIX } from "../lib/pwa/cache-constants";
 
 type PreferencesReset = {
   clearPreferences(): StorageResult;

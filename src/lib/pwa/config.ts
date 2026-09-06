@@ -1,4 +1,6 @@
-export const APP_CACHE_STORAGE_PREFIX = "trance-whale-app-shell:";
+import { APP_CACHE_STORAGE_PREFIX } from "./cache-constants";
+
+export { APP_CACHE_STORAGE_PREFIX } from "./cache-constants";
 
 export function resolveAppShellBuildId(
   environment = process.env.NODE_ENV,
