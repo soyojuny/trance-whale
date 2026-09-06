@@ -1,13 +1,30 @@
 export const APP_CACHE_STORAGE_PREFIX = "trance-whale-app-shell:";
-export const APP_SHELL_BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID ?? "v1";
-export const APP_SHELL_CACHE_NAME = `${APP_CACHE_STORAGE_PREFIX}${APP_SHELL_BUILD_ID}`;
+
+export function resolveAppShellBuildId(
+  environment = process.env.NODE_ENV,
+  buildId = process.env.PWA_BUILD_ID,
+): string {
+  const normalizedBuildId = buildId?.trim();
+  if (normalizedBuildId) return normalizedBuildId;
+  if (environment === "production") {
+    throw new Error("PWA_BUILD_ID is required for production builds");
+  }
+  return "local";
+}
+
+export function createAppShellCacheName(buildId: string): string {
+  return `${APP_CACHE_STORAGE_PREFIX}${buildId}`;
+}
+
+export const APP_SHELL_BUILD_ID = resolveAppShellBuildId();
+export const APP_SHELL_CACHE_NAME = createAppShellCacheName(APP_SHELL_BUILD_ID);
 export const APP_SHELL_PATH = "/";
 export const PRECACHE_PATHS = [
   APP_SHELL_PATH,
   "/read",
   "/manifest.webmanifest",
-  "/icons/icon-192.svg",
-  "/icons/icon-512.svg",
+  "/icons/icon.png",
+  "/icons/apple-touch-icon.png",
 ] as const;
 
 export const SENSITIVE_REQUEST_HEADERS = [

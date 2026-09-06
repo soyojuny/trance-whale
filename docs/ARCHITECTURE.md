@@ -411,7 +411,7 @@ API Key는 사용자가 명시적으로 저장을 선택했을 때만 기록하�
 ## 12. PWA 및 오프라인
 
 - Web App Manifest에 이름, 아이콘, 시작 URL, 테마 색상과 `display: standalone`을 설정한다.
-- Service Worker는 빌드 식별자가 포함된 앱 셸과 정적 자산만 캐시한다.
+- Service Worker는 빌드 식별자가 포함된 앱 셸과 정적 자산만 캐시한다. production 빌드는 배포마다 불변인 `PWA_BUILD_ID`를 설정해야 하며, 같은 배포의 모든 인스턴스는 같은 값을 사용한다.
 - `/api/**`, Gemini API, 외부 e-book URL과 API Key가 포함될 수 있는 요청은 Service Worker 캐시 대상에서 제외한다.
 - 오프라인에서는 IndexedDB의 EPUB archive 또는 저장된 장 원문을 다시 열 수 있고, cache된 번역만 표시할 수 있다.
 - 오프라인 상태에서 신규 URL을 열면 네트워크가 필요하다는 오류를 표시한다.

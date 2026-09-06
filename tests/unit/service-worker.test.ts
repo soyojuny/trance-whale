@@ -4,7 +4,9 @@ import {
   APP_CACHE_STORAGE_PREFIX,
   APP_SHELL_CACHE_NAME,
   APP_SHELL_PATH,
+  createAppShellCacheName,
   PRECACHE_PATHS,
+  resolveAppShellBuildId,
 } from "../../src/lib/pwa/config";
 import {
   activateAppShell,
@@ -22,6 +24,16 @@ function request(url: string, init?: RequestInit) {
 }
 
 describe("service worker cache boundary", () => {
+  it("uses an immutable deployment ID for each production app shell cache", () => {
+    expect(resolveAppShellBuildId("production", "release-a")).toBe("release-a");
+    expect(createAppShellCacheName("release-a")).not.toBe(createAppShellCacheName("release-b"));
+  });
+
+  it("rejects production builds without a deployment ID while preserving a local development cache", () => {
+    expect(() => resolveAppShellBuildId("production")).toThrow("PWA_BUILD_ID");
+    expect(resolveAppShellBuildId("development")).toBe("local");
+  });
+
   it("shares a versioned app-owned cache and precaches only same-origin shell assets", async () => {
     const addAll = vi.fn().mockResolvedValue(undefined);
     const caches = { open: vi.fn().mockResolvedValue({ addAll }) };

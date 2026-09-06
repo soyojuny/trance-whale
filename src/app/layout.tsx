@@ -8,7 +8,8 @@ export const metadata: Metadata = {
   applicationName: "Trance Whale",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/icons/icon-192.svg", type: "image/svg+xml" }],
+    icon: [{ url: "/icons/icon.png", type: "image/png", sizes: "1024x1024" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "1024x1024" }],
   },
   appleWebApp: { capable: true, title: "Trance Whale", statusBarStyle: "default" },
 };

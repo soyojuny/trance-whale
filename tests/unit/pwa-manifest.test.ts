@@ -16,8 +16,8 @@ describe("PWA manifest", () => {
       background_color: "#f6f3eb",
     });
     expect(value.icons).toEqual(expect.arrayContaining([
-      expect.objectContaining({ src: "/icons/icon-192.svg", sizes: "192x192" }),
-      expect.objectContaining({ src: "/icons/icon-512.svg", sizes: "512x512" }),
+      expect.objectContaining({ src: "/icons/icon.png", sizes: "1024x1024", type: "image/png" }),
+      expect.objectContaining({ src: "/icons/apple-touch-icon.png", sizes: "1024x1024", type: "image/png" }),
     ]));
   });
 });
@@ -25,7 +25,8 @@ describe("PWA manifest", () => {
 describe("root metadata", () => {
   it("declares the application icon for browser tabs", () => {
     expect(metadata.icons).toEqual({
-      icon: [{ url: "/icons/icon-192.svg", type: "image/svg+xml" }],
+      icon: [{ url: "/icons/icon.png", type: "image/png", sizes: "1024x1024" }],
+      apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "1024x1024" }],
     });
   });
 });
