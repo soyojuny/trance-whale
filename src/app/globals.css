@@ -38,6 +38,12 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .eyebrow { display: flex; align-items: center; gap: 7px; color: var(--teal); font-size: 11px; font-weight: 700; letter-spacing: .19em; }
 .welcome h1 { margin: 21px 0 17px; max-width: 660px; font-family: Georgia, "Noto Serif KR", serif; font-size: clamp(46px, 6vw, 72px); line-height: 1.08; letter-spacing: -.045em; text-align: center; font-weight: 600; }
 .welcome > p { max-width: 520px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.75; text-align: center; }
+.pwa-install-prompt { width: min(740px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 22px; padding: 14px 15px; color: var(--teal); background: var(--teal-pale); border: 1px solid #bcd4cc; }
+.pwa-install-prompt div { display: grid; gap: 4px; }
+.pwa-install-prompt strong { font-size: 12px; }
+.pwa-install-prompt p { margin: 0; color: #506d65; font-size: 11px; line-height: 1.5; }
+.pwa-install-prompt button { min-width: 88px; min-height: 44px; padding: 0 14px; border: 0; color: #fff; background: var(--teal); font-size: 12px; font-weight: 700; cursor: pointer; }
+.pwa-install-prompt button:hover { background: var(--teal-dark); }
 .epub-import { width: min(740px, 100%); margin-top: 42px; padding: 20px; background: rgba(255,255,255,.76); border: 1px solid #c7d0cc; box-shadow: 0 8px 26px rgba(24,48,42,.08); }
 .epub-import h2 { margin: 0 0 12px; font-size: 14px; }
 .epub-picker { min-height: 48px; display: inline-flex; align-items: center; padding: 0 21px; background: var(--teal); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -220,6 +226,8 @@ footer strong { color: #52645e; font-family: Georgia, serif; }
   .eyebrow { font-size: 9px; }
   .welcome h1 { margin-top: 17px; font-size: 42px; line-height: 1.12; text-align: left; }
   .welcome > p { font-size: 14px; text-align: left; }
+  .pwa-install-prompt { align-items: flex-start; flex-direction: column; margin-top: 20px; }
+  .pwa-install-prompt button { width: 100%; }
   .epub-import { margin-top: 31px; padding: 17px; }
   .epub-picker { width: 100%; justify-content: center; }
   .web-import { margin-top: 13px; }

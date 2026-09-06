@@ -22,7 +22,7 @@
 | 문단 대응과 순차 표시 | `tests/unit/translation-output.test.ts`, `translation-orchestrator.test.ts`, `reader-view.test.tsx`; `tests/integration/client-translation-pipeline.test.ts` | FR-03·06·07, AC 4·5·6 |
 | cache hit/miss 및 무효화 | `tests/integration/cached-translation-pipeline.test.ts`, `client-translation-pipeline.test.ts`; `tests/unit/translation-cache-key.test.ts`, `source-cache.client.test.ts` | FR-08, AC 8·10·16 |
 | 웹 내부 navigation·목차·읽기 위치 | `tests/integration/reader-navigation.test.tsx`, `tests/unit/catalog-sheet.test.tsx`, `catalog-session.client.test.ts` | FR-06·06-1, AC 14 |
-| PWA와 저장소 경계 | `tests/unit/pwa-manifest.test.ts`, `service-worker.test.ts`, `tests/integration/local-data-reset.test.ts` | FR-05·08·09, AC 11·12·15 |
+| PWA와 저장소 경계 | `tests/unit/pwa-manifest.test.ts`, `service-worker.test.ts`, `pwa-install-prompt.test.tsx`, `tests/integration/local-data-reset.test.ts` | FR-05·08·09, AC 11·12·15 |
 | 기존 360px 웹 흐름 | `tests/e2e/mvp-reader.spec.ts`의 cache 복원·overflow·44px 도구막대·키보드 사례 | NFR 접근성, EPUB 흐름 추가 필요 |
 
 ## 개발·통합 회귀 방지 기준
@@ -43,6 +43,12 @@
 - `tests/unit/home-settings-flow.test.tsx`, `tests/integration/reader-navigation.test.tsx`, `tests/unit/catalog-sheet.test.tsx`는 20개 테스트를 통과했고, `npm run typecheck`와 `npm run lint`도 통과했다.
 - Playwright 실행은 이 환경의 Next.js web server가 포트를 열 수 없어 시작하지 못했다(`Operation not permitted`). 이번 EPUB archive 재열기 변경 후에도 같은 오류로 재실행이 중단됐다. 따라서 360px·데스크톱의 브라우저 시각 확인은 포트 바인딩이 가능한 환경에서 다시 실행한다.
 - EPUB archive 재열기 단위 검증은 archive·목차·장 경로만 저장하고 source cache에 EPUB 원문 장을 남기지 않으며, 저장 archive에서 요청 장을 다시 추출하는 것을 확인한다. E2E도 EPUB 원문 source cache가 비어 있는지를 확인한다.
+
+### PWA 설치 UI 확인 (2026-09-06)
+
+- 모바일 홈에서 Android Chromium은 `beforeinstallprompt`가 발생한 경우에만 `앱 설치` 버튼을 표시하고, iOS Safari는 `공유 메뉴 → 홈 화면에 추가` 안내를 표시한다. 설치된 상태에서는 설치 안내를 숨긴다.
+- `tests/unit/pwa-install-prompt.test.tsx`는 지연된 설치 prompt, iOS Safari 안내, 설치 완료 후 숨김을 검증했고 `npm run typecheck`와 `npm run lint`도 통과했다.
+- Playwright 실행은 이 환경의 Next.js web server가 CSS 처리 중 포트를 열 수 없어 시작하지 못했다(`Operation not permitted`). 따라서 360px 실기기에서 Android 설치 prompt와 iOS Safari 안내의 시각·상호작용 확인은 배포 환경에서 다시 수행한다.
 
 ## 인수 조건 추적
 

@@ -19,6 +19,7 @@ import {
   type LastReadingPosition,
 } from "../types/storage";
 import Icon from "./ui/icon";
+import PwaInstallPrompt from "./pwa-install-prompt";
 
 type PreferencesPort = {
   loadPreferences(): Preferences;
@@ -274,6 +275,7 @@ export default function HomeSettingsFlow({
           <p className="eyebrow">TRANCE WHALE</p>
           <h1 id="welcome-title">읽고 싶은 이야기를 가져오세요</h1>
           <p>합법적으로 이용할 수 있는 EPUB을 선택해 이 기기에서 번역하며 읽을 수 있어요.</p>
+          <PwaInstallPrompt />
           <section className="epub-import" aria-labelledby="epub-import-title">
             <h2 id="epub-import-title">EPUB 파일 가져오기</h2>
             <label className="epub-picker" htmlFor="epub-file">EPUB 파일 선택</label>
