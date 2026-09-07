@@ -1,0 +1,47 @@
+{
+  "project": "Trance Whale",
+  "phase": "progressive-gemini-translation",
+  "steps": [
+    {
+      "step": 0,
+      "name": "chunk-paragraph-limits",
+      "status": "completed",
+      "summary": "청크 기본값을 2,000자·24문단으로 제한하고 세 번째 paragraphBudget 인자로 재정의를 지원하며, 문단 보존·초과 문단 격리·잘못된 제한값 검증 22개 테스트와 typecheck·lint를 통과했다."
+    },
+    {
+      "step": 1,
+      "name": "gemini-dynamic-output-schema",
+      "status": "completed",
+      "summary": "responseJsonSchema에 청크별 minItems/maxItems와 순서별 ID enum prefixItems를 적용하고 비어 있지 않은 text 계약은 런타임에서도 검증하며, Gemini·출력 계약 32개 테스트와 production import·typecheck·lint를 통과했다."
+    },
+    {
+      "step": 2,
+      "name": "sse-incremental-json-parser",
+      "status": "completed",
+      "summary": "gemini-stream.client에 UTF-8/SSE decoder, visible text part 추출과 완결 객체 증분 parser를 추가하고 불완전 EOF·연결 오류 비밀값 보호·production import를 포함한 33개 테스트와 typecheck·lint를 통과했다."
+    },
+    {
+      "step": 3,
+      "name": "streaming-gemini-client",
+      "status": "completed",
+      "summary": "청크 번역을 streamGenerateContent SSE로 전환하고 정확한 다음 ID 검증 후 onProgress(문단)·종료 시 전체 결과 일치 검증·취소/연결 실패 보존을 구현했으며, client 31개와 parser/출력 29개 테스트·typecheck·lint를 통과했다."
+    },
+    {
+      "step": 4,
+      "name": "sequential-progress-orchestrator",
+      "status": "completed",
+      "summary": "기본 동시성 1·문단별 즉시 progress·검증된 initialTranslations 재개·미완료/실패 ID 배열을 구현하고 부분 네트워크 재시도에서 완료 문단과 늦은 callback을 제외했으며, orchestrator/계약 45개 테스트·production import·typecheck·lint를 통과했다."
+    },
+    {
+      "step": 5,
+      "name": "partial-translation-cache",
+      "status": "completed",
+      "summary": "IndexedDB v6에서 legacy complete와 명시적 complete/partial 번역 레코드를 호환해 읽고, 문단 ID 기반 부분 진행의 debounce·terminal flush와 두 레코드 종류의 byte-size·LRU·quota 처리를 구현했으며 관련 26개 테스트·typecheck·lint를 통과했다."
+    },
+    {
+      "step": 6,
+      "name": "resume-cached-translation-pipeline",
+      "status": "pending"
+    }
+  ]
+}

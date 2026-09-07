@@ -9,7 +9,11 @@ import type {
   TranslationCachePutInput,
 } from "../../src/services/translation-cache.client";
 import type { ChapterSource } from "../../src/types/source";
-import type { TranslationCacheRecord } from "../../src/types/storage";
+import type {
+  PartialTranslationCacheRecord,
+  StoredTranslationCacheRecord,
+  TranslationCacheRecord,
+} from "../../src/types/storage";
 import type { TranslationParagraph, TranslationProgress } from "../../src/types/translation";
 
 const chapter: ChapterSource = {
@@ -49,12 +53,37 @@ function record(cacheKey: string, overrides: Partial<TranslationCacheRecord> = {
   };
 }
 
+function partialRecord(
+  cacheKey: string,
+  overrides: Partial<PartialTranslationCacheRecord> = {},
+): PartialTranslationCacheRecord {
+  return {
+    cacheKey,
+    canonicalUrl: chapter.canonicalUrl,
+    contentHash: chapter.contentHash,
+    modelId: TRANSLATION_MODELS.fast.modelId,
+    targetLanguage: "ko",
+    basePromptVersion: "v1",
+    userPromptHash: "b".repeat(64),
+    kind: "partial",
+    progressStatus: "partial_failure",
+    translatedParagraphs: [{ id: "p-1", text: "p-1-ko" }],
+    totalParagraphs: 3,
+    unfinishedParagraphIds: ["p-2", "p-3"],
+    failedParagraphIds: ["p-2"],
+    createdAt: "2026-09-04T00:00:00.000Z",
+    accessedAt: "2026-09-04T00:00:00.000Z",
+    byteSize: 1,
+    ...overrides,
+  };
+}
+
 function cacheDouble() {
-  const records = new Map<string, TranslationCacheRecord>();
+  const records = new Map<string, StoredTranslationCacheRecord>();
   const cache: TranslationCache = {
     get: vi.fn(async (key) => records.get(key)),
     put: vi.fn(async (input: TranslationCachePutInput) => {
-      const stored = record(input.cacheKey, {
+      const metadata = {
         canonicalUrl: input.canonicalUrl,
         contentHash: input.contentHash,
         modelId: input.modelId,
@@ -62,7 +91,16 @@ function cacheDouble() {
         basePromptVersion: input.basePromptVersion,
         userPromptHash: input.userPromptHash,
         translatedParagraphs: input.progress.translations,
-      });
+      };
+      const stored = input.progress.status === "complete"
+        ? record(input.cacheKey, { ...metadata, kind: "complete" })
+        : partialRecord(input.cacheKey, {
+          ...metadata,
+          progressStatus: input.progress.status,
+          totalParagraphs: input.progress.totalParagraphs,
+          unfinishedParagraphIds: input.progress.unfinishedParagraphIds ?? [],
+          failedParagraphIds: input.progress.failedParagraphIds ?? [],
+        });
       records.set(input.cacheKey, stored);
       return { ok: true as const, record: stored };
     }),
@@ -121,6 +159,43 @@ describe("cached translation pipeline", () => {
     expect(events).toEqual([result.progress]);
     expect(translate).not.toHaveBeenCalled();
     expect(cache.put).not.toHaveBeenCalled();
+  });
+
+  it("restores a partial record first and requests only missing paragraph IDs", async () => {
+    const { cache, records } = cacheDouble();
+    const translate = vi.fn(async ({ chunk }: { chunk: { paragraphs: TranslationParagraph[] } }) =>
+      translations(chunk.paragraphs),
+    );
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+    records.set(task.cacheKey, partialRecord(task.cacheKey, {
+      translatedParagraphs: [
+        { id: "p-3", text: "p-3-ko" },
+        { id: "p-1", text: "p-1-ko" },
+      ],
+      unfinishedParagraphIds: ["p-2"],
+      failedParagraphIds: ["p-2"],
+    }));
+    const events: TranslationProgress[] = [];
+
+    expect(await task.getCached()).toBeUndefined();
+    const result = await task.execute({
+      apiKey: "test-key",
+      onProgress: (progress) => events.push(progress),
+    });
+
+    expect(result).toMatchObject({ cache: "miss", persistence: { status: "saved" } });
+    expect(events[0]).toMatchObject({
+      status: "translating",
+      translations: [{ id: "p-1" }, { id: "p-3" }],
+      unfinishedParagraphIds: ["p-2"],
+    });
+    expect(translate).toHaveBeenCalledOnce();
+    expect(translate.mock.calls[0]?.[0].chunk.paragraphs.map(({ id }) => id)).toEqual(["p-2"]);
+    expect(result.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
+    expect(records.get(task.cacheKey)).toMatchObject({ kind: "complete" });
   });
 
   it("forwards miss progress and stores only a complete, exact result", async () => {
@@ -182,8 +257,8 @@ describe("cached translation pipeline", () => {
     expect(translate).toHaveBeenCalled();
   });
 
-  it("keeps partial and cancelled paragraphs without caching them", async () => {
-    const { cache } = cacheDouble();
+  it("flushes partial and cancelled paragraphs to resumable records", async () => {
+    const { cache, records } = cacheDouble();
     const partialTask = await prepareCachedChapterTranslation(
       { chapter, mode: "fast", userPrompt: "" },
       {
@@ -202,11 +277,17 @@ describe("cached translation pipeline", () => {
 
     expect(partial).toMatchObject({
       cache: "miss",
-      persistence: { status: "not_attempted" },
+      persistence: { status: "saved" },
       progress: { status: "partial_failure" },
     });
     expect(partial.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-3"]);
-    expect(cache.put).not.toHaveBeenCalled();
+    expect(vi.mocked(cache.put).mock.lastCall?.[0].progress).toMatchObject({
+      status: "partial_failure",
+      unfinishedParagraphIds: ["p-2"],
+      failedParagraphIds: ["p-2"],
+    });
+    vi.mocked(cache.put).mockClear();
+    records.clear();
 
     const controller = new AbortController();
     const cancelledTask = await prepareCachedChapterTranslation(
@@ -225,9 +306,12 @@ describe("cached translation pipeline", () => {
     );
     const cancelled = await cancelledTask.execute({ apiKey: "test-key", signal: controller.signal });
 
-    expect(cancelled).toMatchObject({ persistence: { status: "not_attempted" }, progress: { status: "cancelled" } });
+    expect(cancelled).toMatchObject({ persistence: { status: "saved" }, progress: { status: "cancelled" } });
     expect(cancelled.progress.translations).toEqual([{ id: "p-1", text: "p-1-ko" }]);
-    expect(cache.put).not.toHaveBeenCalled();
+    expect(vi.mocked(cache.put).mock.lastCall?.[0].progress).toMatchObject({
+      status: "cancelled",
+      unfinishedParagraphIds: ["p-2", "p-3"],
+    });
   });
 
   it("keeps a successful translation when persistence safely fails", async () => {
@@ -292,6 +376,7 @@ describe("cached translation pipeline", () => {
     const first = await task.execute({ apiKey: "test-key" });
     const retryEvents: TranslationProgress[] = [];
 
+    vi.mocked(cache.put).mockClear();
     vi.mocked(translate).mockImplementation(async ({ chunk }) => translations(chunk.paragraphs));
     const retried = await task.execute({
       apiKey: "test-key",
@@ -316,6 +401,30 @@ describe("cached translation pipeline", () => {
     });
     expect(retried.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
     expect(cache.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains streamed successes from inside a failed chunk during an explicit retry", async () => {
+    const { cache } = cacheDouble();
+    const translate = vi.fn(async ({ chunk }: { chunk: { paragraphs: TranslationParagraph[] } }) =>
+      translations(chunk.paragraphs),
+    );
+    const task = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, characterBudget: 10, translate } },
+    );
+
+    const result = await task.execute({
+      apiKey: "test-key",
+      retryFailed: {
+        failedChunkIds: ["chunk-0"],
+        successfulTranslations: [{ id: "p-1", text: "p-1-ko" }],
+      },
+    });
+
+    expect(translate).toHaveBeenCalledOnce();
+    expect(translate.mock.calls[0]?.[0].chunk.paragraphs.map(({ id }) => id)).toEqual(["p-2", "p-3"]);
+    expect(result.progress.status).toBe("complete");
+    expect(result.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
   });
 
   it("retains seeded successes and does not cache when a failed chunk retry fails again", async () => {
@@ -350,8 +459,12 @@ describe("cached translation pipeline", () => {
       failedChunkIds: ["chunk-1"],
       translations: [{ id: "p-1" }, { id: "p-3" }],
     });
-    expect(retried.persistence).toEqual({ status: "not_attempted" });
-    expect(cache.put).not.toHaveBeenCalled();
+    expect(retried.persistence).toEqual({ status: "saved" });
+    expect(cache.put).toHaveBeenCalledOnce();
+    expect(vi.mocked(cache.put).mock.lastCall?.[0].progress).toMatchObject({
+      status: "partial_failure",
+      unfinishedParagraphIds: ["p-2"],
+    });
   });
 
   it("safely rejects an invalid partial retry without translating or caching", async () => {

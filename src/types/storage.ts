@@ -54,21 +54,73 @@ const translatedParagraphsSchema = z
     });
   });
 
+const translationCacheBaseShape = {
+  cacheKey: sha256Schema,
+  canonicalUrl: SourceLocatorSchema,
+  contentHash: sha256Schema,
+  modelId: nonEmptyStringSchema,
+  targetLanguage: z.literal("ko"),
+  basePromptVersion: nonEmptyStringSchema,
+  userPromptHash: sha256Schema,
+  createdAt: timestampSchema,
+  accessedAt: timestampSchema,
+  byteSize: z.number().int().nonnegative(),
+} as const;
+
 export const TranslationCacheRecordSchema = z
   .object({
-    cacheKey: sha256Schema,
-    canonicalUrl: SourceLocatorSchema,
-    contentHash: sha256Schema,
-    modelId: nonEmptyStringSchema,
-    targetLanguage: z.literal("ko"),
-    basePromptVersion: nonEmptyStringSchema,
-    userPromptHash: sha256Schema,
+    ...translationCacheBaseShape,
+    kind: z.literal("complete").optional(),
     translatedParagraphs: translatedParagraphsSchema,
-    createdAt: timestampSchema,
-    accessedAt: timestampSchema,
-    byteSize: z.number().int().nonnegative(),
   })
   .strict();
+
+const paragraphIdsSchema = z.array(nonEmptyStringSchema).superRefine((ids, context) => {
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: "custom", message: "Paragraph IDs must be unique" });
+  }
+});
+
+export const PartialTranslationCacheRecordSchema = z
+  .object({
+    ...translationCacheBaseShape,
+    kind: z.literal("partial"),
+    progressStatus: z.enum(["translating", "partial_failure", "cancelled", "failed"]),
+    translatedParagraphs: translatedParagraphsSchema,
+    totalParagraphs: z.number().int().positive(),
+    unfinishedParagraphIds: paragraphIdsSchema.min(1),
+    failedParagraphIds: paragraphIdsSchema,
+  })
+  .strict()
+  .superRefine((record, context) => {
+    const translatedIds = new Set(record.translatedParagraphs.map(({ id }) => id));
+    if (record.translatedParagraphs.length + record.unfinishedParagraphIds.length !== record.totalParagraphs) {
+      context.addIssue({
+        code: "custom",
+        message: "Stored progress must account for every paragraph",
+        path: ["totalParagraphs"],
+      });
+    }
+    if (record.unfinishedParagraphIds.some((id) => translatedIds.has(id))) {
+      context.addIssue({
+        code: "custom",
+        message: "Unfinished paragraph IDs must not be translated",
+        path: ["unfinishedParagraphIds"],
+      });
+    }
+    if (record.failedParagraphIds.some((id) => !record.unfinishedParagraphIds.includes(id))) {
+      context.addIssue({
+        code: "custom",
+        message: "Failed paragraph IDs must be unfinished",
+        path: ["failedParagraphIds"],
+      });
+    }
+  });
+
+export const StoredTranslationCacheRecordSchema = z.union([
+  PartialTranslationCacheRecordSchema,
+  TranslationCacheRecordSchema,
+]);
 
 export const CatalogCacheRecordSchema = z
   .object({
@@ -132,6 +184,8 @@ export type TranslationSettings = z.infer<typeof TranslationSettingsSchema>;
 export type ReaderSettings = z.infer<typeof ReaderSettingsSchema>;
 export type LastReadingPosition = z.infer<typeof LastReadingPositionSchema>;
 export type TranslationCacheRecord = z.infer<typeof TranslationCacheRecordSchema>;
+export type PartialTranslationCacheRecord = z.infer<typeof PartialTranslationCacheRecordSchema>;
+export type StoredTranslationCacheRecord = z.infer<typeof StoredTranslationCacheRecordSchema>;
 export type CatalogCacheRecord = z.infer<typeof CatalogCacheRecordSchema>;
 export type SourceCacheRecord = z.infer<typeof SourceCacheRecordSchema>;
 export type LocalEpubBookRecord = z.infer<typeof LocalEpubBookSchema>;

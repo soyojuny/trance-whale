@@ -229,7 +229,7 @@ EPUB 장은 기존 `ChapterSource` 모양으로 정규화한다. `sourceUrl`과 
 ### 6.2 번역 캐시
 
 ```ts
-type TranslationCacheRecord = {
+type TranslationCacheBase = {
   cacheKey: string;
   canonicalUrl: string;
   contentHash: string;
@@ -237,14 +237,26 @@ type TranslationCacheRecord = {
   targetLanguage: "ko";
   basePromptVersion: string;
   userPromptHash: string;
-  translatedParagraphs: Array<{ id: string; text: string }>;
   createdAt: string;
   accessedAt: string;
   byteSize: number;
 };
+
+type TranslationCacheRecord = TranslationCacheBase & ({
+  kind?: "complete"; // 기존 레코드는 kind가 없어도 complete로 읽는다.
+  translatedParagraphs: Array<{ id: string; text: string }>;
+} | {
+  kind: "partial";
+  progressStatus: "translating" | "partial_failure" | "cancelled" | "failed";
+  translatedParagraphs: Array<{ id: string; text: string }>;
+  totalParagraphs: number;
+  unfinishedParagraphIds: string[];
+  failedParagraphIds: string[];
+});
 ```
 
 캐시 키의 원재료를 `SHA-256`으로 직렬화하여 고정 길이 키를 만든다. 사용자 프롬프트 원문과 API Key 자체는 캐시 키나 레코드에 저장하지 않는다.
+partial 레코드는 검증을 통과한 번역만 debounce하여 저장하고 취소·스트림 종료 시 즉시 flush한다. complete cache hit으로 취급하지 않으며, 재개할 때 `unfinishedParagraphIds`만 요청한다. 실행마다 달라지는 chunk ID는 저장하지 않는다.
 
 ## 7. API 경계
 
@@ -292,7 +304,8 @@ type TranslationCacheRecord = {
   → 장을 열 때 archive에서 해당 XHTML만 추출하고 content hash 계산
   → 번역 캐시 키 계산
   ├─ cache hit  → IndexedDB 번역문 표시
-  └─ cache miss → 본문 분할 → Gemini 요청 → 묶음별 검증/표시/저장
+  ├─ partial    → 검증된 번역 표시 → 미완료 문단만 Gemini 요청
+  └─ cache miss → 본문 분할 → Gemini 요청 → 검증된 진행 저장 → 완료 레코드 전환
 ```
 
 이 경로는 앱 서버, `/api/**` 또는 원본 웹사이트에 요청하지 않는다. archive의 압축 해제 전과 후 모두 설정된 크기·항목·장·문단 한도를 적용한다.
@@ -309,7 +322,8 @@ type TranslationCacheRecord = {
   → 응답 스키마 검증
   → 브라우저에서 번역 캐시 키 계산
   ├─ cache hit  → IndexedDB 번역문 표시
-  └─ cache miss → 본문 분할 → Gemini 요청 → 묶음별 검증/표시/저장
+  ├─ partial    → 검증된 번역 표시 → 미완료 문단만 Gemini 요청
+  └─ cache miss → 본문 분할 → Gemini 요청 → 검증된 진행 저장 → 완료 레코드 전환
 ```
 
 ### 8.3 이전 장과 다음 장
@@ -349,27 +363,34 @@ EPUB은 저장된 로컬 목차를 우선 사용하고, 목차가 없으면 spin
 - 각 요청은 문단 ID와 원문 텍스트의 배열로 구성한다.
 - 정확한 토큰 한도는 샘플 장 벤치마크 후 결정하고 중앙 설정으로 관리한다.
 - 첫 번역 표시 시간을 줄이기 위해 앞부분 묶음부터 처리한다.
-- 동시 요청 수는 작은 고정값으로 제한하고 `429` 응답 시 줄인다.
+- 기본 청크는 최대 24문단·2,000자로 제한하고 문단을 분할하지 않는다. 단독 문단이 문자 제한을 넘으면 그 문단만 별도 청크로 처리한다.
+- 기본 동시 요청 수는 1이며 앞 청크 종료 후 다음 청크를 요청한다. `429` 응답은 자동 재시도하지 않는다.
 - 사용자가 장을 이동하거나 취소하면 `AbortController`로 남은 요청을 중단한다.
+
+재개 입력 `initialTranslations`는 원문에 존재하는 고유 ID와 비어 있지 않은 번역문을 가진 성공 문단이다. 기본 재개는 누락 문단만 원문 순서로 다시 청크화한다. 명시적 `chunkIds` 재시도는 기존 전체 원문의 청크 번호로 선택한 뒤 이미 성공한 문단을 제외한다. 재청크화한 실행의 청크 번호는 실행에 한정되므로 영속 재개는 문단 ID를 기준으로 한다.
 
 ### 9.3 출력 계약
 
 Gemini에는 문단 ID와 번역 문자열로 이루어진 구조화 출력을 요청한다. 다음 조건을 검증한다.
 
-- 요청한 ID와 일치한다. 단, 모델이 ID 뒤에 식별자가 아닌 문자만 덧붙인 경우에는 원래 ID로 정규화한다.
+- 요청한 ID와 일치한다. 단, 모델이 ID 뒤에 식별자가 아닌 문자 또는 단일 영문자를 덧붙인 경우에는 원래 ID로 정규화한다.
 - 모든 ID가 정확히 한 번 존재한다.
 - 빈 번역문이 없다.
 - 문단 순서가 원문과 대응된다.
 
-검증 실패 시 해당 묶음만 제한된 횟수로 재시도한다. 그래도 실패하면 성공한 문단은 유지하고 실패한 범위를 사용자에게 표시한다.
+번역 요청은 브라우저에서 `streamGenerateContent` SSE로 전송한다. 스트림의 완결 문단은 예상한 다음 ID와 정확히 일치할 때만 progress callback에 전달하며, 이 단계에서는 ID 접미사를 보정하지 않는다. 종료 시 위 전체 출력 계약을 재검증하고 이미 전달한 문단과 최종 결과의 ID·텍스트가 일치하는지 확인한다.
+
+보정할 수 없는 검증 실패는 자동 재시도하지 않는다. 성공한 문단은 유지하고 실패한 범위를 사용자에게 표시하며, 사용자가 해당 묶음만 다시 요청할 수 있다.
 
 ### 9.4 재시도
 
 - 네트워크 오류와 재시도 가능한 `5xx`: 지수 백오프와 jitter를 적용한다.
 - `429` 사용량 소진: 자동 재시도하지 않고 사용량 소진 안내를 표시한다.
 - 잘못된 API Key, 권한 없음, 모델 미지원: 재시도하지 않는다.
-- 안전 정책 차단 또는 출력 계약 반복 실패: 해당 묶음을 실패 처리한다.
+- 안전 정책 차단 또는 출력 계약 실패: 해당 묶음을 실패 처리한다.
 - 모든 재시도에는 상한을 두고 사용자 취소 신호를 존중한다.
+
+번역 실행 중 브라우저 콘솔에는 `translation-diagnostic` 이벤트를 남긴다. 실행 ID, 청크 ID, 시도 번호, 재시도 예약 여부, Gemini 응답 ID·모델 버전·종료 사유·토큰 수와 출력 계약 오류 사유만 기록한다. API Key, 원문, 번역문, Gemini 원시 응답 및 오류 메시지는 기록하거나 외부로 전송하지 않는다.
 
 ## 10. 상태 관리
 
@@ -378,6 +399,8 @@ Gemini에는 문단 ID와 번역 문자열로 이루어진 구조화 출력을 �
 - 전역 상태 라이브러리는 MVP에서 사용하지 않는다.
 - 저장되는 상태는 `preferences.client.ts`와 `reader-db.client.ts`를 통해서만 읽고 쓴다.
 - 탭 간 설정 동기화가 필요하면 `storage` 이벤트를 사용한다.
+
+스트리밍 오케스트레이터의 progress는 검증된 성공 문단을 원문 순서로 즉시 전달하고 실패·취소 후에도 보존한다. `unfinishedParagraphIds`는 아직 성공하지 않은 모든 문단 ID, `failedParagraphIds`는 영구 실패한 청크에 속한 미완료 문단 ID이며 둘 다 원문 순서다. 취소되거나 아직 요청하지 않은 문단은 미완료지만 실패로 분류하지 않는다. 기존 `failedChunkIds`는 명시적 청크 재시도용으로 유지한다. 새 ID 배열은 기존 progress 생산자와 호환되도록 스키마에서 선택적이지만 오케스트레이터는 항상 두 배열을 제공한다.
 
 리더 상태는 다음 상태 머신을 따른다.
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_TRANSLATION_CHARACTER_BUDGET,
+  DEFAULT_TRANSLATION_PARAGRAPH_BUDGET,
   chunkParagraphs,
 } from "../../src/lib/translation/chunk";
 
@@ -86,8 +87,76 @@ describe("chunkParagraphs", () => {
     expect(second).toEqual(first);
   });
 
-  it("exports a conservative default character budget", () => {
-    expect(DEFAULT_TRANSLATION_CHARACTER_BUDGET).toBeGreaterThan(0);
-    expect(chunkParagraphs([{ id: "p-1", text: "text" }])).toHaveLength(1);
+  it("limits the default chunk to 24 paragraphs while preserving order", () => {
+    const paragraphs = Array.from({ length: 25 }, (_, index) => ({
+      id: `p-${index}`,
+      text: "text",
+    }));
+
+    expect(DEFAULT_TRANSLATION_PARAGRAPH_BUDGET).toBe(24);
+    expect(chunkParagraphs(paragraphs)).toEqual([
+      { chunkId: "chunk-0", paragraphs: paragraphs.slice(0, 24) },
+      { chunkId: "chunk-1", paragraphs: paragraphs.slice(24) },
+    ]);
+  });
+
+  it("starts a new default chunk after exactly 2,000 characters", () => {
+    const paragraphs = [
+      { id: "p-1", text: "a".repeat(1_000) },
+      { id: "p-2", text: "b".repeat(1_000) },
+      { id: "p-3", text: "c" },
+    ];
+
+    expect(DEFAULT_TRANSLATION_CHARACTER_BUDGET).toBe(2_000);
+    expect(chunkParagraphs(paragraphs)).toEqual([
+      { chunkId: "chunk-0", paragraphs: paragraphs.slice(0, 2) },
+      { chunkId: "chunk-1", paragraphs: paragraphs.slice(2) },
+    ]);
+  });
+
+  it("lets callers override both limits with deterministic chunk IDs", () => {
+    const paragraphs = [
+      { id: "p-1", text: "a" },
+      { id: "p-2", text: "b" },
+      { id: "p-3", text: "cd" },
+      { id: "p-4", text: "efgh" },
+    ];
+    const chunks = chunkParagraphs(paragraphs, 5, 2);
+
+    expect(chunks).toEqual([
+      { chunkId: "chunk-0", paragraphs: paragraphs.slice(0, 2) },
+      { chunkId: "chunk-1", paragraphs: [paragraphs[2]] },
+      { chunkId: "chunk-2", paragraphs: [paragraphs[3]] },
+    ]);
+    expect(chunkParagraphs(paragraphs, 5, 2)).toEqual(chunks);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity, -Infinity])(
+    "rejects an invalid character budget: %s",
+    (budget) => {
+      expect(() => chunkParagraphs([], budget)).toThrow(RangeError);
+    },
+  );
+
+  it.each([0, -1, 1.5, NaN, Infinity, -Infinity])(
+    "rejects an invalid paragraph budget: %s",
+    (budget) => {
+      expect(() => chunkParagraphs([], undefined, budget)).toThrow(RangeError);
+    },
+  );
+
+  it("isolates a paragraph exceeding the default budget", () => {
+    const paragraphs = [
+      { id: "p-1", text: "before" },
+      { id: "p-2", text: "x".repeat(2_001) },
+      { id: "p-3", text: "after" },
+    ];
+
+    expect(chunkParagraphs(paragraphs)).toEqual(
+      paragraphs.map((paragraph, index) => ({
+        chunkId: `chunk-${index}`,
+        paragraphs: [paragraph],
+      })),
+    );
   });
 });

@@ -12,7 +12,7 @@ function normalizeTranslationId(id: string, requestedIds: readonly string[]): st
     .find((requestedId) => {
       if (!trimmedId.startsWith(requestedId)) return false;
       const suffix = trimmedId.slice(requestedId.length);
-      return suffix.length === 0 || /^[^A-Za-z0-9]+$/u.test(suffix);
+      return suffix.length === 0 || /^[^A-Za-z0-9]+$/u.test(suffix) || /^[A-Za-z]$/u.test(suffix);
     });
 
   return matchingId ?? id;

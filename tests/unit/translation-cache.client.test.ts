@@ -1,9 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ReaderDatabaseError, type ReaderDatabase, type ReaderDbStore } from "../../src/services/reader-db.client";
 import {
   calculateTranslationRecordByteSize,
   createTranslationCache,
+  createTranslationCacheWriteScheduler,
+  isCompleteTranslationCacheRecord,
   type TranslationCachePutInput,
 } from "../../src/services/translation-cache.client";
 
@@ -28,6 +30,21 @@ function completeInput(overrides: Partial<TranslationCachePutInput> = {}): Trans
     },
     ...overrides,
   };
+}
+
+function partialInput(overrides: Partial<TranslationCachePutInput> = {}): TranslationCachePutInput {
+  return completeInput({
+    progress: {
+      status: "partial_failure",
+      completedParagraphs: 1,
+      totalParagraphs: 2,
+      translations: [{ id: "p1", text: "완료" }],
+      failedChunkIds: ["chunk-2"],
+      unfinishedParagraphIds: ["p2"],
+      failedParagraphIds: ["p2"],
+    },
+    ...overrides,
+  });
 }
 
 class MemoryDatabase implements ReaderDatabase {
@@ -60,6 +77,10 @@ class MemoryDatabase implements ReaderDatabase {
 }
 
 describe("translation cache", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("preserves paragraph IDs and order while only refreshing accessedAt on a hit", async () => {
     const database = new MemoryDatabase();
     let now = "2026-09-04T01:00:00.000Z";
@@ -132,25 +153,130 @@ describe("translation cache", () => {
     expect(input).toEqual(original);
   });
 
-  it("rejects partial results and strips secret-like extra fields before reaching the adapter", async () => {
+  it("stores partial progress separately without execution-local chunk IDs or secret-like fields", async () => {
     const database = new MemoryDatabase();
-    const partial = completeInput({
-      progress: {
-        status: "partial_failure",
-        completedParagraphs: 1,
-        totalParagraphs: 2,
-        translations: [{ id: "p1", text: "완료" }],
-        failedChunkIds: ["chunk-2"],
-      },
-    });
     const cache = createTranslationCache({ database, now: () => "2026-09-04T01:00:00.000Z" });
 
-    await expect(cache.put(partial)).rejects.toThrow();
+    const partialWithSecrets = { ...partialInput(), apiKey: "secret", userPrompt: "raw prompt" };
+    const partialResult = await cache.put(partialWithSecrets);
+    expect(partialResult).toMatchObject({
+      ok: true,
+      record: {
+        kind: "partial",
+        progressStatus: "partial_failure",
+        translatedParagraphs: [{ id: "p1", text: "완료" }],
+        totalParagraphs: 2,
+        unfinishedParagraphIds: ["p2"],
+        failedParagraphIds: ["p2"],
+      },
+    });
+    if (!partialResult.ok) return;
+    expect(isCompleteTranslationCacheRecord(partialResult.record)).toBe(false);
+    expect(partialResult.record.byteSize).toBe(calculateTranslationRecordByteSize(partialResult.record));
+    expect(JSON.stringify(partialResult.record)).not.toContain("chunk-2");
+
     const inputWithSecrets = { ...completeInput(), apiKey: "secret", userPrompt: "raw prompt" };
     const result = await cache.put(inputWithSecrets);
     expect(result.ok).toBe(true);
     expect(JSON.stringify([...database.values.values()])).not.toContain("secret");
     expect(JSON.stringify([...database.values.values()])).not.toContain("raw prompt");
+  });
+
+  it("reads legacy complete records as complete while preserving their stored shape", async () => {
+    const database = new MemoryDatabase();
+    const cache = createTranslationCache({ database, now: () => "2026-09-04T02:00:00.000Z" });
+    const stored = await cache.put(completeInput());
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const legacy = { ...stored.record };
+    delete legacy.kind;
+    database.values.set(HASH_A, legacy);
+
+    const hit = await cache.get(HASH_A);
+
+    expect(hit).toEqual({ ...legacy, accessedAt: "2026-09-04T02:00:00.000Z" });
+    expect(hit && isCompleteTranslationCacheRecord(hit)).toBe(true);
+  });
+
+  it("applies byte limits and LRU eviction across complete and partial records", async () => {
+    const database = new MemoryDatabase();
+    let now = "2026-09-04T01:00:00.000Z";
+    const seed = createTranslationCache({ database, now: () => now, maxBytes: 10_000 });
+    const complete = await seed.put(completeInput({ cacheKey: "1".repeat(64) }));
+    now = "2026-09-04T02:00:00.000Z";
+    const partial = await seed.put(partialInput({ cacheKey: "2".repeat(64) }));
+    expect(complete.ok && partial.ok).toBe(true);
+    if (!complete.ok || !partial.ok) return;
+
+    const nextSize = calculateTranslationRecordByteSize({
+      ...partial.record,
+      cacheKey: "3".repeat(64),
+      createdAt: "2026-09-04T03:00:00.000Z",
+      accessedAt: "2026-09-04T03:00:00.000Z",
+    });
+    const limited = createTranslationCache({
+      database,
+      now: () => "2026-09-04T03:00:00.000Z",
+      maxBytes: partial.record.byteSize + nextSize,
+    });
+    await limited.put(partialInput({ cacheKey: "3".repeat(64) }));
+
+    expect([...database.values.keys()]).toEqual(["2".repeat(64), "3".repeat(64)]);
+  });
+
+  it("coalesces progress writes and explicitly flushes terminal progress", async () => {
+    vi.useFakeTimers();
+    const database = new MemoryDatabase();
+    const cache = createTranslationCache({ database, now: () => "2026-09-04T01:00:00.000Z" });
+    const scheduler = createTranslationCacheWriteScheduler({
+      cache,
+      record: {
+        cacheKey: HASH_A,
+        canonicalUrl: "https://www.69shuba.com/txt/1/2",
+        contentHash: HASH_B,
+        modelId: "gemini-test",
+        targetLanguage: "ko",
+        basePromptVersion: "v1",
+        userPromptHash: HASH_A,
+      },
+      delayMs: 100,
+    });
+
+    scheduler.schedule(partialInput().progress);
+    scheduler.schedule({
+      status: "translating",
+      completedParagraphs: 2,
+      totalParagraphs: 3,
+      translations: [{ id: "p1", text: "완료" }, { id: "p2", text: "완료 2" }],
+      failedChunkIds: [],
+      unfinishedParagraphIds: ["p3"],
+      failedParagraphIds: [],
+    });
+    expect(database.putAttempts).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(database.putAttempts).toBe(1);
+    expect(database.values.get(HASH_A)).toMatchObject({
+      kind: "partial",
+      translatedParagraphs: [{ id: "p1" }, { id: "p2" }],
+      unfinishedParagraphIds: ["p3"],
+    });
+
+    scheduler.schedule({
+      status: "cancelled",
+      completedParagraphs: 2,
+      totalParagraphs: 3,
+      translations: [{ id: "p1", text: "완료" }, { id: "p2", text: "완료 2" }],
+      failedChunkIds: [],
+      unfinishedParagraphIds: ["p3"],
+      failedParagraphIds: [],
+    });
+    const flushed = await scheduler.flush();
+
+    expect(flushed).toMatchObject({ ok: true, record: { progressStatus: "cancelled" } });
+    expect(database.putAttempts).toBe(2);
+    await vi.runAllTimersAsync();
+    expect(database.putAttempts).toBe(2);
   });
 
   it("validates DB output and supports delete and translation-only clear", async () => {

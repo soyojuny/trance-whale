@@ -26,6 +26,27 @@ const paragraphs = [
 ];
 
 describe("translation runtime contracts", () => {
+  it("accepts explicit unfinished and failed IDs alongside legacy progress", () => {
+    expect(TranslationProgressSchema.safeParse({
+      status: "partial_failure", completedParagraphs: 1, totalParagraphs: 3,
+      translations: [{ id: "p-1", text: "done" }], failedChunkIds: ["chunk-0"],
+      unfinishedParagraphIds: ["p-2", "p-3"], failedParagraphIds: ["p-2"],
+    }).success).toBe(true);
+  });
+
+  it.each([
+    { unfinishedParagraphIds: ["p-2", "p-2"], failedParagraphIds: [] },
+    { unfinishedParagraphIds: ["p-1", "p-2"], failedParagraphIds: [] },
+    { unfinishedParagraphIds: ["p-2"], failedParagraphIds: [] },
+    { unfinishedParagraphIds: ["p-2", "p-3"], failedParagraphIds: ["p-4"] },
+    { unfinishedParagraphIds: ["p-2", "p-3"], failedParagraphIds: ["p-2", "p-2"] },
+  ])("rejects inconsistent unfinished/failed paragraph IDs", (ids) => {
+    expect(TranslationProgressSchema.safeParse({
+      status: "partial_failure", completedParagraphs: 1, totalParagraphs: 3,
+      translations: [{ id: "p-1", text: "done" }], failedChunkIds: ["chunk-0"], ...ids,
+    }).success).toBe(false);
+  });
+
   it("accepts valid request, structured output, chunk result, and progress data", () => {
     expect(TranslationRequestSchema.parse({ paragraphs })).toEqual({ paragraphs });
     expect(

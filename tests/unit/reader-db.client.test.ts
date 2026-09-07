@@ -246,6 +246,27 @@ describe("reader database adapter", () => {
     });
   });
 
+  it("upgrades version 5 without rewriting legacy complete translation records", async () => {
+    const factory = new FakeFactory();
+    const legacy = { cacheKey: "legacy-translation", translatedParagraphs: [{ id: "p-1", text: "완료" }] };
+    factory.database.version = 5;
+    factory.database.stores.set(READER_DB_SCHEMA.stores.translations.name, {
+      keyPath: "cacheKey",
+      indexes: [READER_DB_SCHEMA.stores.translations.indexes.accessedAt],
+    });
+    factory.database.valuesFor(READER_DB_SCHEMA.stores.translations.name).set(legacy.cacheKey, legacy);
+
+    const database = await openReaderDatabase(factory);
+
+    expect(READER_DB_SCHEMA.version).toBe(6);
+    expect(factory.upgrades).toBe(1);
+    await expect(database.run(
+      READER_DB_SCHEMA.stores.translations.name,
+      "readonly",
+      (store) => store.get(legacy.cacheKey),
+    )).resolves.toEqual(legacy);
+  });
+
   it("resolves readonly and readwrite work only after transaction completion", async () => {
     const factory = new FakeFactory();
     const database = await openReaderDatabase(factory);

@@ -2,7 +2,7 @@ import "client-only";
 
 export const READER_DB_SCHEMA = {
   name: "trance-whale-reader",
-  version: 5,
+  version: 6,
   stores: {
     translations: {
       name: "translation-cache",

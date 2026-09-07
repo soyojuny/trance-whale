@@ -49,6 +49,7 @@ export type ExecuteChapterTranslationRequest = {
   apiKey: string;
   signal?: AbortSignal;
   onProgress?: (progress: ChapterTranslationProgress) => void;
+  initialTranslations?: readonly TranslationParagraph[];
   retryFailed?: FailedChunkRetry;
 };
 
@@ -78,14 +79,15 @@ function validateFailedChunkRetry(
   const failedParagraphIds = new Set(
     chunks.filter((chunk) => failedIds.has(chunk.chunkId)).flatMap((chunk) => chunk.paragraphs.map(({ id }) => id)),
   );
-  const expectedSuccessIds = chapter.paragraphs
-    .map(({ id }) => id)
-    .filter((id) => !failedParagraphIds.has(id));
   const successIds = parsedSuccesses.data.map(({ id }) => id);
+  const sourceIds = new Set(chapter.paragraphs.map(({ id }) => id));
+  const successfulIds = new Set(successIds);
+  const missingIds = chapter.paragraphs.map(({ id }) => id).filter((id) => !successfulIds.has(id));
   return (
-    successIds.length === expectedSuccessIds.length
-    && new Set(successIds).size === successIds.length
-    && successIds.every((id) => expectedSuccessIds.includes(id))
+    successfulIds.size === successIds.length
+    && successIds.every((id) => sourceIds.has(id))
+    && missingIds.length > 0
+    && missingIds.every((id) => failedParagraphIds.has(id))
   );
 }
 
@@ -170,7 +172,7 @@ export async function prepareChapterTranslation(
           signal: execution.signal,
           characterBudget: dependencies.characterBudget,
           chunkIds: execution.retryFailed?.failedChunkIds,
-          initialTranslations: execution.retryFailed?.successfulTranslations,
+          initialTranslations: execution.retryFailed?.successfulTranslations ?? execution.initialTranslations,
           onProgress: execution.onProgress,
         },
         {

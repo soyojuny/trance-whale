@@ -29,6 +29,10 @@
       "dir": "6-local-epub-import",
       "status": "blocked",
       "blocked_at": "2026-09-05T21:50:54+0900"
+    },
+    {
+      "dir": "7-progressive-gemini-translation",
+      "status": "pending"
     }
   ]
 }

@@ -55,6 +55,18 @@
 - `npm run check:boundaries`는 Client Component 또는 `.client.*`의 `.server.*` import, `.server.*` 접미사가 없는 `server-only` 모듈, 서버 외 모듈의 비공개 환경변수 읽기를 거부한다. 이 검사는 `npm run lint`에 포함된다.
 - `tests/unit/client-boundary-policy.test.ts`와 `local-data-client-boundary.test.ts`는 각각 정책 위반과 production 브라우저 import graph에서 build 전용 환경변수가 없는 경우를 검증한다.
 
+### 번역 출력 재시도 처리 확인 (2026-09-07)
+
+- 화면 컴포넌트·스타일은 변경하지 않았다. 출력 계약 오류로 성공 문단이 하나도 없을 때도 기존 리더의 부분 실패·실패 청크 재번역 동작을 사용하도록 상태만 연결했다.
+- `paragraph-55T` 같은 단일 영문 접미사 ID 보정, 보정 불가 출력의 자동 재호출 차단, 실패 청크의 수동 재시도 가능 상태는 unit·integration 테스트로 검증했다. `npm run test`, `npm run typecheck`, `npm run lint`가 통과했다.
+- 시각 레이아웃을 변경하지 않았고 이 환경은 기존 기록처럼 Playwright web server 포트 바인딩을 지원하지 않으므로, 360px·데스크톱 수동 확인은 배포 가능한 환경에서 이어서 수행한다.
+
+### 번역 호출 진단 로그 확인 (2026-09-07)
+
+- 화면 컴포넌트·저장소·네트워크 요청 형식은 변경하지 않았다. 브라우저 콘솔의 `translation-diagnostic` 이벤트는 실행·청크·시도 번호, Gemini 응답 메타데이터, 검증 실패 분류와 자동 재시도 여부만 기록한다.
+- `tests/unit/gemini.client.test.ts`는 Gemini 응답 메타데이터와 출력 계약 오류를 기록하면서 API Key·원문·번역문을 제외하는지 검증한다. `tests/unit/translation-orchestrator.test.ts`는 계약 오류의 무재시도 및 네트워크 오류의 재시도 이벤트 순서를 검증한다.
+- 시각 레이아웃과 상호작용은 변경하지 않았다. 실제 Gemini 요청의 발생 원인은 DevTools Console에서 `Preserve log`를 켠 뒤 이벤트의 동일 `runId`·`chunkId`와 `attempt`를 비교해 수동 확인한다.
+
 ## 인수 조건 추적
 
 | AC | 분류 | 자동 테스트 근거 | 수동 확인 또는 한계 |

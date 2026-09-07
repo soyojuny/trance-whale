@@ -1,7 +1,8 @@
 import type { TranslationParagraph } from "../../types/translation";
 
 // This is a character budget, not a token limit. The exact token policy remains undecided.
-export const DEFAULT_TRANSLATION_CHARACTER_BUDGET = 6_000;
+export const DEFAULT_TRANSLATION_CHARACTER_BUDGET = 2_000;
+export const DEFAULT_TRANSLATION_PARAGRAPH_BUDGET = 24;
 
 export type TranslationChunk = {
   chunkId: string;
@@ -15,9 +16,13 @@ function countCharacters(text: string): number {
 export function chunkParagraphs(
   paragraphs: readonly TranslationParagraph[],
   characterBudget = DEFAULT_TRANSLATION_CHARACTER_BUDGET,
+  paragraphBudget = DEFAULT_TRANSLATION_PARAGRAPH_BUDGET,
 ): TranslationChunk[] {
   if (!Number.isInteger(characterBudget) || characterBudget <= 0) {
     throw new RangeError("characterBudget must be a positive integer");
+  }
+  if (!Number.isInteger(paragraphBudget) || paragraphBudget <= 0) {
+    throw new RangeError("paragraphBudget must be a positive integer");
   }
 
   const chunks: TranslationChunk[] = [];
@@ -42,7 +47,8 @@ export function chunkParagraphs(
 
     if (
       currentParagraphs.length > 0 &&
-      currentCharacterCount + characterCount > characterBudget
+      (currentCharacterCount + characterCount > characterBudget ||
+        currentParagraphs.length >= paragraphBudget)
     ) {
       appendCurrentChunk();
     }

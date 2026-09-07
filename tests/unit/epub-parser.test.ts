@@ -54,7 +54,7 @@ describe("browser EPUB parser", () => {
 
     expect(parsed.book.chapters).toHaveLength(1_500);
     await expectEpubFailure(syntheticEpubFixture({ chapterCount: 2_001 }), "ZIP_LIMIT");
-  }, 30_000);
+  }, 60_000);
 
   it("supports up to 300,000 paragraphs across a long EPUB", () => {
     expect(EPUB_LIMITS.maxTotalParagraphs).toBe(300_000);

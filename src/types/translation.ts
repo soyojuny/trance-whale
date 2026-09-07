@@ -63,6 +63,9 @@ export const TranslationProgressSchema = z
     totalParagraphs: z.number().int().nonnegative(),
     translations: uniqueParagraphsSchema(0),
     failedChunkIds: z.array(nonEmptyStringSchema),
+    // Optional for legacy producers; the streaming orchestrator always emits both.
+    unfinishedParagraphIds: z.array(nonEmptyStringSchema).optional(),
+    failedParagraphIds: z.array(nonEmptyStringSchema).optional(),
   })
   .strict()
   .superRefine((progress, context) => {
@@ -88,6 +91,22 @@ export const TranslationProgressSchema = z
         message: "Failed chunk IDs must be unique",
         path: ["failedChunkIds"],
       });
+    }
+
+    const completedIds = new Set(progress.translations.map(({ id }) => id));
+    for (const field of ["unfinishedParagraphIds", "failedParagraphIds"] as const) {
+      const ids = progress[field];
+      if (ids && (new Set(ids).size !== ids.length || ids.some((id) => completedIds.has(id)))) {
+        context.addIssue({ code: "custom", message: "Incomplete IDs must be unique and not completed", path: [field] });
+      }
+    }
+    if (progress.unfinishedParagraphIds) {
+      if (progress.unfinishedParagraphIds.length !== progress.totalParagraphs - progress.completedParagraphs) {
+        context.addIssue({ code: "custom", message: "Unfinished IDs must match remaining count", path: ["unfinishedParagraphIds"] });
+      }
+      if (progress.failedParagraphIds?.some((id) => !progress.unfinishedParagraphIds!.includes(id))) {
+        context.addIssue({ code: "custom", message: "Failed IDs must be unfinished", path: ["failedParagraphIds"] });
+      }
     }
   });
 
