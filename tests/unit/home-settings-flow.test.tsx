@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import HomeSettingsFlow from "../../src/components/home-settings-flow";
@@ -30,6 +31,26 @@ function setup(overrides: Record<string, unknown> = {}) {
 }
 
 describe("HomeSettingsFlow", () => {
+  it("defers reading browser preferences until after the initial render", () => {
+    const position = {
+      canonicalUrl: "https://www.69shuba.com/txt/48273/32028706",
+      scrollPosition: 42,
+      updatedAt: "2026-09-04T01:00:00.000Z",
+    };
+    const preferences = {
+      loadPreferences: vi.fn(() => ({ translation: DEFAULT_TRANSLATION_SETTINGS, reader: DEFAULT_READER_SETTINGS })),
+      loadReadingPosition: vi.fn(() => position),
+      savePreferences: vi.fn(() => ({ ok: true as const })),
+      clearApiKey: vi.fn(() => ({ ok: true as const })),
+    };
+
+    const html = renderToStaticMarkup(<HomeSettingsFlow preferences={preferences} />);
+
+    expect(html).not.toContain("마지막으로 읽던 장");
+    expect(preferences.loadPreferences).not.toHaveBeenCalled();
+    expect(preferences.loadReadingPosition).not.toHaveBeenCalled();
+  });
+
   it("creates encoded internal reader URLs for submission and continuing", async () => {
     const position = {
       canonicalUrl: "https://www.69shuba.com/txt/48273/32028706?private=detail",
@@ -44,7 +65,7 @@ describe("HomeSettingsFlow", () => {
     };
     const { navigate } = setup({ preferences });
 
-    expect(screen.getByText("마지막으로 읽던 장")).toBeInTheDocument();
+    expect(await screen.findByText("마지막으로 읽던 장")).toBeInTheDocument();
     expect(screen.queryByText(/private=detail/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "이어 읽기" }));
     expect(navigate).toHaveBeenCalledWith(`/read?url=${encodeURIComponent(position.canonicalUrl)}`);

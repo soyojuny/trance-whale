@@ -96,13 +96,13 @@ export default function HomeSettingsFlow({
       localData: localData ?? (typeof window === "undefined" ? null : createLocalDataService()),
     };
   }, [localData, preferences]);
-  const initial = useMemo(() => services.preferences?.loadPreferences() ?? {
+  const initial = useMemo<Preferences>(() => ({
     translation: { ...DEFAULT_TRANSLATION_SETTINGS },
     reader: { ...DEFAULT_READER_SETTINGS },
-  }, [services]);
+  }), []);
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
-  const [lastPosition, setLastPosition] = useState(() => services.preferences?.loadReadingPosition() ?? null);
+  const [lastPosition, setLastPosition] = useState<LastReadingPosition | null>(null);
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState("");
   const [webImportOpen, setWebImportOpen] = useState(false);
@@ -119,12 +119,13 @@ export default function HomeSettingsFlow({
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
   useEffect(() => {
-    if (preferences || !services.preferences) return;
-    const loaded = services.preferences.loadPreferences();
+    const preferenceService = services.preferences;
+    if (!preferenceService) return;
+    const loaded = preferenceService.loadPreferences();
     setSaved(loaded);
     setDraft(loaded);
-    setLastPosition(services.preferences.loadReadingPosition());
-  }, [preferences, services]);
+    setLastPosition(preferenceService.loadReadingPosition());
+  }, [services]);
 
   function closeSheet(): void {
     setOpen(false);
