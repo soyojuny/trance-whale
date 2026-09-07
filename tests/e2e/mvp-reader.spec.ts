@@ -249,7 +249,7 @@ test("reload에서 설정과 번역 cache를 복원하고 360px에서 overflow�
   expect(boundaries.geminiRequests).toHaveLength(translatedRequests);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   const targets = await page.locator(".mobile-reader-tools button:visible").evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
-  expect(targets).toHaveLength(4);
+  expect(targets).toHaveLength(5);
   expect(targets.every((height) => height >= 44)).toBe(true);
 });
 
@@ -369,6 +369,63 @@ test("production Service Worker에서 cached 장은 실제 offline reload로 복
   expect(offlineBoundaryRequests).toEqual([]);
   expect(boundaries.serverRequests).toHaveLength(1);
 });
+
+for (const width of [360, 1280]) {
+  test(`${width}px 리더 설정과 스크롤 방향에 따른 모바일 도구막대`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 740 });
+    await mockBoundaries(page);
+    await saveKeyAndOpen(page);
+    await expect(page.getByText("p-1 한국어 번역")).toBeVisible();
+    const toolbar = page.getByRole("navigation", { name: "모바일 독서 도구" });
+    const settings = page.getByRole("button", { name: width === 360 ? "읽기 및 번역 설정 열기" : "설정", exact: true });
+    await settings.click();
+    await expect(page.getByRole("dialog", { name: "읽기 및 번역 설정" })).toBeVisible();
+    await page.getByLabel("나만의 번역 지시").fill("말투를 유지해 주세요.");
+    await page.getByRole("button", { name: "변경사항 저장" }).click();
+    await page.screenshot({ path: testInfo.outputPath(`settings-${width}.png`), style: ".reading-copy { visibility: hidden; }", mask: [page.getByLabel("Gemini API Key")] });
+    await page.getByRole("button", { name: "설정 닫기" }).click();
+    await expect(settings).toBeFocused();
+    await settings.click();
+    await expect(page.getByLabel("나만의 번역 지시")).toHaveValue("말투를 유지해 주세요.");
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeFocused();
+    await page.getByRole("button", { name: "원문", exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 360) {
+      await expect(toolbar).toBeInViewport();
+      const sizes = await toolbar.getByRole("button").evaluateAll((buttons) => buttons.map((button) => ({ width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height })));
+      expect(sizes).toHaveLength(5);
+      expect(sizes.every((size) => size.width >= 44 && size.height >= 44)).toBe(true);
+      await page.evaluate(() => window.scrollTo({ top: 650, behavior: "instant" }));
+      await expect(page.locator(".mobile-reader-tools")).toHaveAttribute("inert", "");
+      await expect(page.locator(".mobile-reader-tools")).not.toBeInViewport();
+      await settings.evaluate((button) => (button as HTMLElement).focus());
+      await expect(settings).not.toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath("reader-hidden-360.png"), style: ".reading-copy { visibility: hidden; }" });
+      await page.evaluate(() => window.scrollTo({ top: 550, behavior: "instant" }));
+      await expect(toolbar).not.toHaveAttribute("inert", "");
+      await expect(toolbar).toBeInViewport();
+      const catalog = toolbar.getByRole("button", { name: "목차 열기 (모바일)" });
+      await catalog.click();
+      await expect(page.getByLabel("장 번호 또는 제목 검색")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(catalog).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath("reader-visible-360.png"), style: ".reading-copy { visibility: hidden; }" });
+      await toolbar.getByRole("button", { name: "다음 장: 제2화" }).click();
+      await expect(page.getByRole("heading", { name: "제2화 산문" })).toBeVisible();
+      await expect(toolbar).toBeInViewport();
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
+    } else {
+      await expect(toolbar).toBeHidden();
+      await page.evaluate(() => window.scrollTo({ top: 650, behavior: "instant" }));
+      await expect(settings).toBeInViewport();
+      await settings.click();
+      await page.keyboard.press("Escape");
+      await expect(settings).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath("reader-desktop.png"), style: ".reading-copy { visibility: hidden; }" });
+    }
+  });
+}
 
 test("키보드로 보기 모드와 dialog를 조작하고 닫은 뒤 focus를 복원한다", async ({ page }) => {
   await mockBoundaries(page);

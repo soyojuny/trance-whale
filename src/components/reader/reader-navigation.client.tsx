@@ -23,6 +23,7 @@ import { TRANSLATION_MODELS, type TranslationMode } from "../../lib/translation/
 import { MAX_USER_PROMPT_LENGTH } from "../../lib/translation/prompt";
 
 const SCROLL_THROTTLE_MS = 150;
+const TOOLBAR_SCROLL_THRESHOLD = 8;
 
 type PreferencesPort = {
   loadPreferences(): Preferences;
@@ -118,6 +119,7 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
   const [settings, setSettings] = useState(() => suppliedRuntime?.preferences.loadPreferences().reader);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileToolsVisible, setMobileToolsVisible] = useState(true);
   const [translationDraft, setTranslationDraft] = useState(() => suppliedRuntime?.preferences.loadPreferences().translation ?? {
     apiKey: "",
     translationMode: "fast" as TranslationMode,
@@ -219,6 +221,25 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
   useEffect(() => () => runtime?.close(), [runtime]);
 
   useEffect(() => {
+    setMobileToolsVisible(true);
+    if (!canonicalUrl || settingsOpen || catalogOpen) return;
+    const scrollTop = () => Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    let anchor = scrollTop();
+    const onScroll = () => {
+      const top = scrollTop();
+      if (top <= TOOLBAR_SCROLL_THRESHOLD) {
+        setMobileToolsVisible(true);
+        anchor = top;
+      } else if (Math.abs(top - anchor) >= TOOLBAR_SCROLL_THRESHOLD) {
+        setMobileToolsVisible(top < anchor);
+        anchor = top;
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [canonicalUrl, settingsOpen, catalogOpen]);
+
+  useEffect(() => {
     if (!settingsOpen) return;
     setReaderRevealKey(false);
     settingsCloseRef.current?.focus();
@@ -263,7 +284,7 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
         <nav>
           <button type="button" className="rail-link" onClick={() => push("/")}><Icon name="home" /><span>홈</span></button>
           <button type="button" className="rail-link" onClick={() => chapter?.navigation.catalog && openCatalog(chapter.navigation.catalog.url)}><Icon name="list" /><span>목차</span></button>
-          <button ref={settingsButtonRef} type="button" className="rail-link" onClick={() => setSettingsOpen(true)}><Icon name="settings" /><span>설정</span></button>
+          <button type="button" className="rail-link" onClick={(event) => { settingsButtonRef.current = event.currentTarget; setSettingsOpen(true); }}><Icon name="settings" /><span>설정</span></button>
         </nav>
       </aside>
       <div className="reader-session-actions">
@@ -284,10 +305,11 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
         catalogButtonRef={desktopCatalogButtonRef}
       />
       {chapter && (
-        <nav className="mobile-reader-tools is-visible" aria-label="모바일 독서 도구">
+        <nav className={`mobile-reader-tools${mobileToolsVisible ? " is-visible" : ""}`} inert={!mobileToolsVisible} aria-label="모바일 독서 도구">
           <button type="button" disabled={!chapter.navigation.previous} aria-label={chapter.navigation.previous ? `이전 장: ${chapter.navigation.previous.label ?? "장 이동"}` : "이전 장 없음"} onClick={() => chapter.navigation.previous && navigateChapter(chapter.navigation.previous.url)}>←<small>이전 장</small></button>
           <button ref={mobileCatalogButtonRef} type="button" disabled={!chapter.navigation.catalog} aria-label={chapter.navigation.catalog ? "목차 열기 (모바일)" : "목차 없음"} onClick={() => chapter.navigation.catalog && openCatalog(chapter.navigation.catalog.url, mobileCatalogButtonRef.current)}><Icon name="list" /><small>목차</small></button>
           <button type="button" aria-label="홈으로 이동" onClick={() => push("/")}><Icon name="home" /><small>홈</small></button>
+          <button type="button" aria-label="읽기 및 번역 설정 열기" onClick={(event) => { settingsButtonRef.current = event.currentTarget; setSettingsOpen(true); }}><Icon name="settings" /><small>설정</small></button>
           <button type="button" disabled={!chapter.navigation.next} aria-label={chapter.navigation.next ? `다음 장: ${chapter.navigation.next.label ?? "장 이동"}` : "다음 장 없음"} onClick={() => chapter.navigation.next && navigateChapter(chapter.navigation.next.url)}>→<small>다음 장</small></button>
         </nav>
       )}

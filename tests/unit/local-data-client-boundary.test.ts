@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+// Vitest transforms JSX with jsxDEV even when the browser environment is production.
+import "react/jsx-dev-runtime";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -12,5 +14,6 @@ describe("local data client boundary", () => {
 
     await expect(import("../../src/services/local-data.client")).resolves.toBeDefined();
     await expect(import("../../src/lib/translation/cached-pipeline.client")).resolves.toBeDefined();
+    await expect(import("../../src/components/reader/reader-navigation.client")).resolves.toBeDefined();
   });
 });

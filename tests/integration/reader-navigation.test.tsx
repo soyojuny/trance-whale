@@ -17,6 +17,8 @@ vi.mock("next/navigation", () => ({
 
 beforeEach(() => {
   vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+  Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+  Object.defineProperty(document.documentElement, "scrollHeight", { configurable: true, value: 3000 });
 });
 
 const chapter = (id: string, navigation: ChapterSource["navigation"] = {}): ChapterSource => ({
@@ -85,6 +87,62 @@ function runtime(initialPosition: { canonicalUrl: string; scrollPosition: number
 }
 
 describe("reader navigation and position", () => {
+  it("opens settings from the mobile toolbar, saves changes, and returns focus on close", async () => {
+    const testRuntime = runtime();
+    render(<ReaderNavigation initialUrl={chapter("1").sourceUrl} runtime={testRuntime.value} />);
+    testRuntime.publishReader(complete(chapter("1")));
+    const trigger = screen.getByRole("button", { name: "읽기 및 번역 설정 열기" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog", { name: "읽기 및 번역 설정" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("나만의 번역 지시"), { target: { value: "말투 유지" } });
+    fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
+    expect(testRuntime.preferences.savePreferences).toHaveBeenCalledWith(expect.objectContaining({
+      translation: expect.objectContaining({ userPrompt: "말투 유지" }),
+    }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(trigger).toHaveFocus());
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "설정 닫기" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("hides tools while scrolling down, ignores jitter, and shows them scrolling up or at the top", () => {
+    const testRuntime = runtime();
+    render(<ReaderNavigation initialUrl={chapter("1").sourceUrl} runtime={testRuntime.value} />);
+    testRuntime.publishReader(complete(chapter("1")));
+    const toolbar = screen.getByRole("navigation", { name: "모바일 독서 도구" });
+    const scroll = (top: number) => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: top });
+      fireEvent.scroll(window);
+    };
+    expect(toolbar).not.toHaveAttribute("inert");
+    scroll(100);
+    expect(toolbar).toHaveAttribute("inert");
+    scroll(98);
+    expect(toolbar).toHaveAttribute("inert");
+    scroll(80);
+    expect(toolbar).not.toHaveAttribute("inert");
+    scroll(160);
+    expect(toolbar).toHaveAttribute("inert");
+    scroll(0);
+    expect(toolbar).not.toHaveAttribute("inert");
+    scroll(-20);
+    expect(toolbar).not.toHaveAttribute("inert");
+    scroll(100);
+    testRuntime.publishReader(complete(chapter("2")));
+    expect(toolbar).not.toHaveAttribute("inert");
+  });
+
+  it("keeps the mobile toolbar available while settings are open", () => {
+    const testRuntime = runtime();
+    render(<ReaderNavigation initialUrl={chapter("1").sourceUrl} runtime={testRuntime.value} />);
+    testRuntime.publishReader(complete(chapter("1")));
+    fireEvent.click(screen.getByRole("button", { name: "읽기 및 번역 설정 열기" }));
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 100 });
+    fireEvent.scroll(window);
+    expect(screen.getByRole("navigation", { name: "모바일 독서 도구" })).not.toHaveAttribute("inert");
+  });
+
   it("uses one encoded internal route for previous, next, catalog, mobile, and home commands", async () => {
     const testRuntime = runtime();
     const navigate = vi.fn();
