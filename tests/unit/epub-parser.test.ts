@@ -15,7 +15,7 @@ async function expectEpubFailure(
 }
 
 describe("browser EPUB parser", () => {
-  it("extracts deterministic local chapter and catalog data without raw XHTML", async () => {
+  it("builds deterministic local metadata without retaining chapter source data", async () => {
     const parsed = await parseEpub(syntheticEpubFixture(), { importedAt });
     const again = await parseEpub(syntheticEpubFixture(), { importedAt });
 
@@ -24,20 +24,13 @@ describe("browser EPUB parser", () => {
       expect.objectContaining({ index: 0, title: "첫 항해" }),
       expect.objectContaining({ index: 1, title: "둘째 항해" }),
     ]);
-    expect(parsed.chapters.map((chapter) => chapter.canonicalUrl)).toEqual([
-      `local-epub://book/${parsed.book.id}/chapter/0`,
-      `local-epub://book/${parsed.book.id}/chapter/1`,
-    ]);
-    expect(parsed.chapters[0].paragraphs).toEqual([
-      { id: "paragraph-1", text: "고래는 바다를 보았다." },
-      { id: "paragraph-2", text: "파도는 조용했다." },
-    ]);
+    expect(parsed).not.toHaveProperty("chapters");
     expect(parsed.catalog.chapters.map(({ title, sourceIndex }) => ({ title, sourceIndex }))).toEqual([
       { title: "첫 항해", sourceIndex: 0 },
       { title: "둘째 항해", sourceIndex: 1 },
     ]);
     expect(parsed.chapterPaths).toEqual(["OPS/text/chapter-1.xhtml", "OPS/text/chapter-2.xhtml"]);
-    expect(JSON.stringify(parsed)).not.toMatch(/<script|<style|<iframe|onclick=/i);
+    expect(JSON.stringify(parsed)).not.toMatch(/고래는 바다를 보았다.|<script|<style|<iframe|onclick=/i);
   });
 
   it("extracts one stored EPUB chapter without rebuilding the book", async () => {
@@ -59,7 +52,7 @@ describe("browser EPUB parser", () => {
   it("accepts long serializations up to 2,000 chapters and rejects larger ones", async () => {
     const parsed = await parseEpub(syntheticEpubFixture({ chapterCount: 1_500 }), { importedAt });
 
-    expect(parsed.chapters).toHaveLength(1_500);
+    expect(parsed.book.chapters).toHaveLength(1_500);
     await expectEpubFailure(syntheticEpubFixture({ chapterCount: 2_001 }), "ZIP_LIMIT");
   }, 30_000);
 
@@ -70,7 +63,7 @@ describe("browser EPUB parser", () => {
   it("skips cover, navigation, and volume documents in the EPUB spine", async () => {
     const parsed = await parseEpub(syntheticEpubFixture({ structuralSpineItems: true }), { importedAt });
 
-    expect(parsed.chapters.map((chapter) => chapter.chapterTitle)).toEqual(["첫 항해", "둘째 항해"]);
+    expect(parsed.book.chapters.map((chapter) => chapter.title)).toEqual(["첫 항해", "둘째 항해"]);
     expect(parsed.catalog.chapters.map((chapter) => chapter.title)).toEqual(["첫 항해", "둘째 항해"]);
   });
 

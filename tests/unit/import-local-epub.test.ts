@@ -19,7 +19,7 @@ describe("local EPUB import", () => {
     let completeImport: ((value: { ok: true; book: { id: string } }) => void) | undefined;
     const close = vi.fn();
     const database = { close };
-    dependencies.parseEpub.mockResolvedValue({ book: {}, chapters: [], catalog: {}, chapterPaths: [] });
+    dependencies.parseEpub.mockResolvedValue({ book: {}, catalog: {}, chapterPaths: [] });
     dependencies.openReaderDatabase.mockResolvedValue(database);
     dependencies.createCatalogCache.mockReturnValue({});
     dependencies.createLocalEpubLibrary.mockReturnValue({

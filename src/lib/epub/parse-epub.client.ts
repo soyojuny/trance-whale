@@ -66,10 +66,10 @@ type ParsedTextChapter = {
 };
 
 type ParsedStructuralDocument = { kind: "structural" };
+type InspectedTextChapter = { title: string; paragraphCount: number };
 
 export type ParsedEpub = {
   book: LocalEpubBook;
-  chapters: ChapterSource[];
   catalog: CatalogSource;
   chapterPaths: string[];
 };
@@ -320,14 +320,10 @@ function isCoverDocument(document: XMLDocument, item: PackageItem): boolean {
     || elementsByName(document, "div").some((element) => element.getAttribute("id") === "cover");
 }
 
-function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string, item: PackageItem): ParsedTextChapter | ParsedStructuralDocument {
-  const documentBytes = extractEntry(bytes, entry);
-  const document = parseXml(new TextDecoder().decode(documentBytes), "INVALID_XHTML");
-  const paragraphs = elementsByName(document, "p")
-    .map((paragraph) => textContent(paragraph))
-    .filter((paragraph): paragraph is string => Boolean(paragraph))
-    .map((text, index) => ({ id: `paragraph-${index + 1}`, text }));
-  if (paragraphs.length === 0) {
+function inspectChapterDocument(document: XMLDocument, fallbackTitle: string, item: PackageItem): InspectedTextChapter | ParsedStructuralDocument {
+  const paragraphCount = elementsByName(document, "p")
+    .reduce((count, paragraph) => count + Number(Boolean(textContent(paragraph))), 0);
+  if (paragraphCount === 0) {
     if (elementsByName(document, "img").length > 0) {
       if (isCoverDocument(document, item)) return { kind: "structural" };
       throw new EpubParserError("IMAGE_BASED");
@@ -336,7 +332,24 @@ function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string,
     throw new EpubParserError("EMPTY_CHAPTER");
   }
   const title = textContent(elementsByName(document, "h1")[0]) ?? textContent(elementsByName(document, "title")[0]) ?? fallbackTitle;
-  return { title, paragraphs, contentHash: sha256(documentBytes) };
+  return { title, paragraphCount };
+}
+
+function inspectChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string, item: PackageItem): InspectedTextChapter | ParsedStructuralDocument {
+  const document = parseXml(new TextDecoder().decode(extractEntry(bytes, entry)), "INVALID_XHTML");
+  return inspectChapterDocument(document, fallbackTitle, item);
+}
+
+function parseChapter(bytes: Uint8Array, entry: ZipEntry, fallbackTitle: string, item: PackageItem): ParsedTextChapter | ParsedStructuralDocument {
+  const documentBytes = extractEntry(bytes, entry);
+  const document = parseXml(new TextDecoder().decode(documentBytes), "INVALID_XHTML");
+  const inspected = inspectChapterDocument(document, fallbackTitle, item);
+  if ("kind" in inspected) return inspected;
+  const paragraphs = elementsByName(document, "p")
+    .map((paragraph) => textContent(paragraph))
+    .filter((paragraph): paragraph is string => Boolean(paragraph))
+    .map((text, index) => ({ id: `paragraph-${index + 1}`, text }));
+  return { title: inspected.title, paragraphs, contentHash: sha256(documentBytes) };
 }
 
 function navigationTitles(
@@ -380,9 +393,9 @@ export async function parseEpub(file: Blob, options: ParseEpubOptions = {}): Pro
     .filter((item) => item !== packageData.nav)
     .map((item) => ({
       item,
-      parsed: parseChapter(bytes, requiredEntry(entries, item.path, "INVALID_XHTML"), "", item),
+      parsed: inspectChapter(bytes, requiredEntry(entries, item.path, "INVALID_XHTML"), "", item),
     }));
-  const readableSpine = parsedSpine.filter((entry): entry is { item: PackageItem; parsed: ParsedTextChapter } => !("kind" in entry.parsed));
+  const readableSpine = parsedSpine.filter((entry): entry is { item: PackageItem; parsed: InspectedTextChapter } => !("kind" in entry.parsed));
   if (readableSpine.length === 0) {
     throw new EpubParserError("EMPTY_CHAPTER");
   }
@@ -394,28 +407,20 @@ export async function parseEpub(file: Blob, options: ParseEpubOptions = {}): Pro
     new Set(readableSpine.map((entry) => entry.item.path)),
   );
   const importedAt = options.importedAt ?? new Date().toISOString();
-  const chapters: ChapterSource[] = await Promise.all(readableSpine.map(async ({ item, parsed }, index) => {
-    if (parsed.paragraphs.length > limits.maxParagraphsPerChapter) throw new EpubParserError("ZIP_LIMIT");
-    const locator = createLocalEpubLocator(bookId, index);
-    return LocalEpubChapterSchema.parse({
-      kind: "chapter", sourceUrl: locator, canonicalUrl: locator, siteId: "local-epub", bookId,
-      bookTitle: packageData.title, chapterId: `chapter-${index}`, chapterNumber: index + 1,
-      chapterTitle: tocTitles.get(item.path) ?? parsed.title, paragraphs: parsed.paragraphs,
-      navigation: {
-        previous: index > 0 ? { url: createLocalEpubLocator(bookId, index - 1) } : undefined,
-        catalog: { url: createLocalEpubLocator(bookId, 0) },
-        next: index < packageData.spine.length - 1 ? { url: createLocalEpubLocator(bookId, index + 1) } : undefined,
-      },
-      contentHash: await parsed.contentHash, fetchedAt: importedAt,
-    });
-  }));
-  if (chapters.reduce((total, chapter) => total + chapter.paragraphs.length, 0) > limits.maxTotalParagraphs) {
+  if (readableSpine.some(({ parsed }) => parsed.paragraphCount > limits.maxParagraphsPerChapter)) {
+    throw new EpubParserError("ZIP_LIMIT");
+  }
+  if (readableSpine.reduce((total, { parsed }) => total + parsed.paragraphCount, 0) > limits.maxTotalParagraphs) {
     throw new EpubParserError("ZIP_LIMIT");
   }
   const book = LocalEpubBookSchema.parse({
     id: bookId, title: packageData.title, author: packageData.author, language: packageData.language,
     sourceByteSize: file.size, importedAt,
-    chapters: chapters.map((chapter, index) => ({ index, canonicalUrl: chapter.canonicalUrl, title: chapter.chapterTitle })),
+    chapters: readableSpine.map(({ item, parsed }, index) => ({
+      index,
+      canonicalUrl: createLocalEpubLocator(bookId, index),
+      title: tocTitles.get(item.path) ?? parsed.title,
+    })),
   });
   const catalog = LocalEpubCatalogSchema.parse({
     kind: "catalog", sourceUrl: createLocalEpubLocator(bookId, 0), canonicalUrl: createLocalEpubLocator(bookId, 0),
@@ -423,7 +428,7 @@ export async function parseEpub(file: Blob, options: ParseEpubOptions = {}): Pro
     chapters: book.chapters.map((chapter) => ({ id: `chapter-${chapter.index}`, url: chapter.canonicalUrl, title: chapter.title, number: chapter.index + 1, sourceIndex: chapter.index })),
     fetchedAt: importedAt,
   });
-  return { book, chapters, catalog, chapterPaths: readableSpine.map((entry) => entry.item.path) };
+  return { book, catalog, chapterPaths: readableSpine.map((entry) => entry.item.path) };
 }
 
 export async function parseStoredEpubChapter(

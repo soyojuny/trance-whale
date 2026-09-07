@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import { createLocalEpubLocator } from "../../src/lib/epub/locator.client";
 import { createLocalEpubLibrary } from "../../src/services/local-epub-library.client";
 import type { ReaderDatabase, ReaderDbStore, ReaderDbStoreName } from "../../src/services/reader-db.client";
-import type { ChapterSource } from "../../src/types/source";
 import type { LocalEpubBook } from "../../src/types/epub";
 
 const BOOK_ID = "a".repeat(64);
@@ -34,14 +33,6 @@ class MemoryDatabase implements ReaderDatabase {
   close() {}
 }
 
-function chapter(): ChapterSource {
-  return {
-    kind: "chapter", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
-    bookTitle: "Synthetic book", chapterId: "chapter-0", chapterNumber: 1, chapterTitle: "First chapter",
-    paragraphs: [{ id: "paragraph-1", text: "local text" }], navigation: {}, contentHash: "b".repeat(64), fetchedAt: IMPORTED_AT,
-  };
-}
-
 function book(): LocalEpubBook {
   return {
     id: BOOK_ID, title: "Synthetic book", sourceByteSize: 5, importedAt: IMPORTED_AT,
@@ -69,7 +60,7 @@ describe("local EPUB library", () => {
     });
     const archive = epubArchive();
 
-    await expect(library.import({ archive, book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+    await expect(library.import({ archive, book: book(), chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
     } })).resolves.toEqual({ ok: true, book: book() });
@@ -92,7 +83,7 @@ describe("local EPUB library", () => {
       storage: { estimate: async () => ({ usage: 98, quota: 100 }), persist: async () => false },
     });
 
-    const result = await library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+    const result = await library.import({ archive: epubArchive(), book: book(), chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
     } });
@@ -113,7 +104,7 @@ describe("local EPUB library", () => {
       },
     });
 
-    await expect(library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+    await expect(library.import({ archive: epubArchive(), book: book(), chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
     } })).resolves.toEqual({ ok: true, book: book() });
@@ -127,7 +118,7 @@ describe("local EPUB library", () => {
       storage: { estimate: async () => ({ usage: 0, quota: 10_000 }), persist: async () => true },
     });
 
-    const result = await library.import({ archive: epubArchive(), book: book(), chapters: [chapter()], chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
+    const result = await library.import({ archive: epubArchive(), book: book(), chapterPaths: ["OPS/text/chapter-1.xhtml"], catalog: {
       kind: "catalog", sourceUrl: LOCATOR, canonicalUrl: LOCATOR, siteId: "local-epub", bookId: BOOK_ID,
       bookTitle: "Synthetic book", chapters: [{ id: "chapter-0", url: LOCATOR, title: "First chapter", sourceIndex: 0 }], fetchedAt: IMPORTED_AT,
     } });

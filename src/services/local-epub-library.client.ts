@@ -6,7 +6,6 @@ import { parseStoredEpubChapter } from "../lib/epub/parse-epub.client";
 import {
   LocalEpubBookSchema,
   LocalEpubCatalogSchema,
-  LocalEpubChapterSchema,
   type LocalEpubBook,
 } from "../types/epub";
 import {
@@ -15,7 +14,7 @@ import {
   type LocalEpubArchiveChunkRecord,
   type LocalEpubArchiveRecord,
 } from "../types/storage";
-import type { CatalogSource, ChapterSource } from "../types/source";
+import type { CatalogSource } from "../types/source";
 import { READER_DB_SCHEMA, ReaderDatabaseError, type ReaderDatabase } from "./reader-db.client";
 import type { SourceCacheLookup } from "./source-cache.client";
 
@@ -31,7 +30,6 @@ type LocalCatalogCache = {
 export type LocalEpubImport = {
   archive: Blob;
   book: LocalEpubBook;
-  chapters: ChapterSource[];
   catalog: CatalogSource;
   chapterPaths: string[];
 };
@@ -127,32 +125,28 @@ function archiveChunks(bookId: string, archiveBytes: ArrayBuffer): LocalEpubArch
   return chunks;
 }
 
-function validateImport(input: LocalEpubImport): { book: LocalEpubBook; chapters: ChapterSource[]; catalog: CatalogSource; chapterPaths: string[] } {
+function validateImport(input: LocalEpubImport): { book: LocalEpubBook; catalog: CatalogSource; chapterPaths: string[] } {
   if (typeof Blob === "undefined" || !(input.archive instanceof Blob)) throw new TypeError("Invalid EPUB archive");
   const book = LocalEpubBookSchema.parse(input.book);
   if (book.sourceByteSize !== input.archive.size) throw new TypeError("Archive size does not match metadata");
   if (book.chapters.some((chapter, index) => chapter.index !== index || chapter.canonicalUrl !== createLocalEpubLocator(book.id, index))) {
     throw new TypeError("EPUB chapter metadata must be ordered locators");
   }
-  if (input.chapters.length !== book.chapters.length) throw new TypeError("EPUB chapter metadata does not match content");
   if (
     input.chapterPaths.length !== book.chapters.length
     || input.chapterPaths.some((path) => typeof path !== "string" || path.length === 0)
     || new Set(input.chapterPaths).size !== input.chapterPaths.length
   ) throw new TypeError("EPUB chapter paths must match content");
-  const chapters = input.chapters.map((chapter, index) => {
-    const parsed = LocalEpubChapterSchema.parse(chapter);
-    const metadata = book.chapters[index];
-    if (
-      parsed.bookId !== book.id
-      || parsed.canonicalUrl !== metadata.canonicalUrl
-      || parsed.chapterTitle !== metadata.title
-    ) throw new TypeError("EPUB chapter does not match metadata");
-    return parsed;
-  });
   const catalog = LocalEpubCatalogSchema.parse(input.catalog);
   if (catalog.bookId !== book.id) throw new TypeError("EPUB catalog does not match metadata");
-  return { book, chapters, catalog, chapterPaths: input.chapterPaths };
+  if (
+    catalog.chapters.length !== book.chapters.length
+    || catalog.chapters.some((chapter, index) => {
+      const metadata = book.chapters[index];
+      return chapter.url !== metadata.canonicalUrl || chapter.title !== metadata.title || chapter.sourceIndex !== index;
+    })
+  ) throw new TypeError("EPUB catalog does not match metadata");
+  return { book, catalog, chapterPaths: input.chapterPaths };
 }
 
 export function createLocalEpubLibrary({
