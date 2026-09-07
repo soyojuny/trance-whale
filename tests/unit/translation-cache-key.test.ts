@@ -41,7 +41,7 @@ describe("createTranslationCacheKey", () => {
     ["content hash", { contentHash: "b".repeat(64) }],
     ["model", { modelId: TRANSLATION_MODELS.quality.modelId }],
     ["target language", { targetLanguage: "en" }],
-    ["base prompt version", { basePromptVersion: "v2" }],
+    ["base prompt version", { basePromptVersion: `${BASE_PROMPT_VERSION}-changed` }],
     ["user prompt", { userPrompt: "경지명은 한자 독음으로 번역해 주세요." }],
   ])("changes when only %s changes", async (_label, changed) => {
     await expect(createTranslationCacheKey({ ...input, ...changed })).resolves.not.toBe(

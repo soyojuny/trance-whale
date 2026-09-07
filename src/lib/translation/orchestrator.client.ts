@@ -26,6 +26,7 @@ export type Translate = (request: {
   apiKey: string;
   modelId: string;
   userPrompt: string;
+  isChapterStart: boolean;
   chunk: TranslationChunk;
   signal: AbortSignal;
   runId: string;
@@ -224,6 +225,7 @@ export async function orchestrateTranslation(
           apiKey: request.apiKey,
           modelId: request.modelId,
           userPrompt: request.userPrompt,
+          isChapterStart: attemptChunk.paragraphs[0]?.id === request.paragraphs[0]?.id,
           chunk: attemptChunk,
           signal: controller.signal,
           runId,

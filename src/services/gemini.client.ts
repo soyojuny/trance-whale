@@ -32,6 +32,7 @@ type CommonRequest = {
 type TranslateChunkRequest = CommonRequest & {
   chunk: TranslationChunk;
   userPrompt: string;
+  isChapterStart: boolean;
   runId?: string;
   attempt?: number;
   diagnosticLogger?: TranslationDiagnosticLogger;
@@ -211,7 +212,7 @@ export async function translateChunk(
   request: TranslateChunkRequest,
 ): Promise<TranslationParagraph[]> {
   const response = await sendGeminiRequest(request, {
-    systemInstruction: { parts: [{ text: buildTranslationPrompt(request.userPrompt) }] },
+    systemInstruction: { parts: [{ text: buildTranslationPrompt(request.userPrompt, request.isChapterStart) }] },
     contents: [
       {
         role: "user",

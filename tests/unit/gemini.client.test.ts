@@ -34,11 +34,33 @@ describe("Gemini client", () => {
     apiKey: API_KEY,
     modelId,
     userPrompt: "",
+    isChapterStart: true,
     chunk: { chunkId: "chunk-0", paragraphs: [
       { id: "p1", text: "source-one" },
       { id: "p2", text: "source-two" },
     ] },
     signal: new AbortController().signal,
+  });
+
+  it.each([true, false])("scopes opening instructions to the chapter start: %s", async (isChapterStart) => {
+    const userPrompt = "최상단에 **제N장 제목(한자)**으로 시작하여 즉시 본문을 출력한다. 이름은 음역한다.";
+    const input = streamingRequest();
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(sseResponse(textEvent(JSON.stringify({
+      translations: input.chunk.paragraphs,
+    }))));
+
+    await translateChunk({ ...input, userPrompt, isChapterStart, fetchImpl });
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body));
+    const prompt = body.systemInstruction.parts[0].text;
+    expect(prompt).toContain(userPrompt);
+    expect(prompt).toContain(isChapterStart
+      ? "이 요청은 장의 첫 문단을 포함한다."
+      : "이 요청은 같은 장의 이어지는 본문이며 장의 시작이 아니다.");
+    expect(prompt).toContain("원문에 실제로 있는 중간 제목은 번역하여 보존한다.");
+    if (!isChapterStart) {
+      expect(prompt).toContain("사용자 지시에 최상단 제목이나 시작 문구가 있더라도 이 요청에서는 추가하거나 반복하지 않는다.");
+    }
   });
 
   it("delivers a complete first paragraph while the next paragraph is still streaming", async () => {
@@ -175,7 +197,7 @@ describe("Gemini client", () => {
     const chunk = { chunkId: "chunk-0", paragraphs: [{ id: "p1", text: "你好" }] };
 
     await expect(
-      translateChunk({ apiKey: API_KEY, modelId, userPrompt: "이름을 유지한다.", chunk, signal, fetchImpl }),
+      translateChunk({ apiKey: API_KEY, modelId, userPrompt: "이름을 유지한다.", isChapterStart: true, chunk, signal, fetchImpl }),
     ).resolves.toEqual([{ id: "p1", text: "안녕" }]);
 
     const [url, init] = fetchImpl.mock.calls[0];
@@ -205,6 +227,7 @@ describe("Gemini client", () => {
         apiKey: API_KEY,
         modelId,
         userPrompt: "",
+        isChapterStart: true,
         chunk: { chunkId: "chunk-0", paragraphs },
         signal: new AbortController().signal,
         fetchImpl,
@@ -252,9 +275,15 @@ describe("Gemini client", () => {
     vi.stubEnv("PWA_BUILD_ID", undefined);
 
     try {
-      await expect(import("../../src/services/gemini.client")).resolves.toMatchObject({
-        translateChunk: expect.any(Function),
-      });
+      const { translateChunk: translateInProduction } = await import("../../src/services/gemini.client");
+      const input = streamingRequest();
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(sseResponse(textEvent(JSON.stringify({
+        translations: input.chunk.paragraphs,
+      }))));
+      await expect(translateInProduction({ ...input, isChapterStart: false, fetchImpl }))
+        .resolves.toEqual(input.chunk.paragraphs);
+      const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body));
+      expect(body.systemInstruction.parts[0].text).toContain("이 요청은 같은 장의 이어지는 본문이며 장의 시작이 아니다.");
     } finally {
       vi.unstubAllEnvs();
       vi.resetModules();
@@ -285,6 +314,7 @@ describe("Gemini client", () => {
       apiKey: API_KEY,
       modelId,
       userPrompt: "",
+      isChapterStart: false,
       chunk: { chunkId: "chunk-7", paragraphs: [{ id: "p1", text: "비밀 원문" }] },
       signal: new AbortController().signal,
       runId: "translation-run-1",

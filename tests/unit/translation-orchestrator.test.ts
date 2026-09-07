@@ -24,6 +24,18 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 describe("orchestrateTranslation", () => {
+  it.each([
+    { overrides: {}, expected: [true, false, false] },
+    { overrides: { initialTranslations: [paragraphs[0]] }, expected: [false, false] },
+    { overrides: { initialTranslations: [paragraphs[1]] }, expected: [true, false] },
+    { overrides: { chunkIds: ["chunk-2"] }, expected: [false] },
+    { overrides: { characterBudget: 10 }, expected: [true] },
+  ])("identifies the chapter opening from source paragraphs: $overrides", async ({ overrides, expected }) => {
+    const translate = vi.fn<Translate>(async ({ chunk }) => chunk.paragraphs);
+    await orchestrateTranslation(request(overrides), { translate });
+    expect(translate.mock.calls.map(([call]) => call.isChapterStart)).toEqual(expected);
+  });
+
   it("requests chunks sequentially by default and forwards a paragraph before chunk completion", async () => {
     const events: TranslationProgress[] = [];
     const releases: Array<() => void> = [];
@@ -118,6 +130,7 @@ describe("orchestrateTranslation", () => {
       .mockImplementationOnce(async ({ chunk }) => chunk.paragraphs.map(({ id }) => ({ id, text: "new" })));
     const result = await orchestrateTranslation(request({ characterBudget: 10 }), { translate, sleep: vi.fn().mockResolvedValue(undefined), jitter: () => 0 });
     expect(translate.mock.calls[1][0].chunk.paragraphs.map(({ id }) => id)).toEqual(["p-2", "p-3"]);
+    expect(translate.mock.calls.map(([call]) => call.isChapterStart)).toEqual([true, false]);
     expect(result).toMatchObject({ status: "complete", translations: [{ id: "p-1", text: "kept" }, { id: "p-2", text: "new" }, { id: "p-3", text: "new" }] });
   });
 
