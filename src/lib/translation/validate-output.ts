@@ -5,6 +5,19 @@ import {
   type TranslationParagraph,
 } from "../../types/translation";
 
+function normalizeTranslationId(id: string, requestedIds: readonly string[]): string {
+  const trimmedId = id.trim();
+  const matchingId = [...requestedIds]
+    .sort((left, right) => right.length - left.length)
+    .find((requestedId) => {
+      if (!trimmedId.startsWith(requestedId)) return false;
+      const suffix = trimmedId.slice(requestedId.length);
+      return suffix.length === 0 || /^[^A-Za-z0-9]+$/u.test(suffix);
+    });
+
+  return matchingId ?? id;
+}
+
 export function validateTranslationOutput(
   rawResponse: string,
   chunk: TranslationChunk,
@@ -27,17 +40,10 @@ export function validateTranslationOutput(
   }
 
   const requestedIds = chunk.paragraphs.map((paragraph) => paragraph.id);
-  const requestedIdSet = new Set(requestedIds);
   const translations = parsed.data.translations.map((paragraph) => {
-    const trimmedId = paragraph.id.trim();
-    const idWithoutTrailingColon = trimmedId.endsWith(":")
-      ? trimmedId.slice(0, -1).trimEnd()
-      : trimmedId;
-    const id = requestedIdSet.has(idWithoutTrailingColon)
-      ? idWithoutTrailingColon
-      : paragraph.id;
-    return { ...paragraph, id };
+    return { ...paragraph, id: normalizeTranslationId(paragraph.id, requestedIds) };
   });
+  const requestedIdSet = new Set(requestedIds);
   const translatedIds = translations.map((paragraph) => paragraph.id);
 
   if (translatedIds.some((id) => !requestedIdSet.has(id))) {

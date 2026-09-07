@@ -303,7 +303,7 @@ describe("reader session controller", () => {
     expect(controller.getState().status).toBe("complete");
   });
 
-  it("keeps only unique safe public errors and retries only retryable partial failures", async () => {
+  it("keeps only unique safe public errors and does not retry usage exhaustion", async () => {
     const secret = "AIza-partial-failure-key";
     const partial = progress("partial_failure", [{ id: "p1", text: "하나" }], ["chunk-2", "chunk-3"]);
     const execute = vi.fn(async () => ({
@@ -321,7 +321,11 @@ describe("reader session controller", () => {
     expect(controller.getState()).toMatchObject({
       status: "partial_failure",
       errors: [
-        { code: "QUOTA_EXCEEDED", message: "Gemini API 할당량이 소진되었습니다.", retryable: true },
+        {
+          code: "QUOTA_EXCEEDED",
+          message: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
+          retryable: false,
+        },
         { code: "TRANSLATION_BLOCKED", message: "안전 정책으로 번역할 수 없습니다.", retryable: false },
       ],
     });
@@ -329,13 +333,7 @@ describe("reader session controller", () => {
 
     await controller.retryFailedTranslation();
 
-    expect(execute).toHaveBeenCalledTimes(2);
-    expect(execute).toHaveBeenLastCalledWith(expect.objectContaining({
-      retryFailed: {
-        failedChunkIds: ["chunk-2", "chunk-3"],
-        successfulTranslations: [{ id: "p1", text: "하나" }],
-      },
-    }));
+    expect(execute).toHaveBeenCalledOnce();
   });
 
   it("does not retry a partial failure when every public error is non-retryable", async () => {

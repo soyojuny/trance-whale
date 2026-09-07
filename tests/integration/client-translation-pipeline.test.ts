@@ -60,13 +60,13 @@ describe("client translation pipeline", () => {
     expect(JSON.stringify(events)).not.toContain("이름은 음역한다.");
   });
 
-  it("retries only the affected chunks for quota and output-contract failures", async () => {
+  it("does not retry usage exhaustion but retries the affected output-contract failure", async () => {
     const attempts = new Map<string, number>();
     const translate = vi.fn(async ({ chunk }: { chunk: { chunkId: string; paragraphs: TranslationParagraph[] } }) => {
       const attempt = (attempts.get(chunk.chunkId) ?? 0) + 1;
       attempts.set(chunk.chunkId, attempt);
       if (chunk.chunkId === "chunk-0" && attempt === 1) {
-        throw new GeminiClientError("QUOTA_EXCEEDED", true);
+        throw new GeminiClientError("QUOTA_EXCEEDED", false);
       }
       if (chunk.chunkId === "chunk-1" && attempt === 1) {
         throw new TranslationOutputError("MISSING_ID");
@@ -80,9 +80,15 @@ describe("client translation pipeline", () => {
 
     const result = await task.execute({ apiKey: "test-key" });
 
-    expect(result.progress.status).toBe("complete");
-    expect(attempts).toEqual(new Map([["chunk-0", 2], ["chunk-1", 2], ["chunk-2", 1]]));
-    expect(result.errors).toEqual([]);
+    expect(result.progress).toMatchObject({ status: "partial_failure", failedChunkIds: ["chunk-0"] });
+    expect(result.progress.translations.map(({ id }) => id)).toEqual(["p-2", "p-3"]);
+    expect(attempts).toEqual(new Map([["chunk-0", 1], ["chunk-1", 2], ["chunk-2", 1]]));
+    expect(result.errors).toEqual([{
+      chunkId: "chunk-0",
+      code: "QUOTA_EXCEEDED",
+      message: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
+      retryable: false,
+    }]);
   });
 
   it("preserves completed paragraphs for permanent failure and cancellation", async () => {

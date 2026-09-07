@@ -47,7 +47,7 @@ const ERROR_MESSAGES: Record<
 > = {
   INVALID_API_KEY: "Gemini API Key를 확인해 주세요.",
   MODEL_UNAVAILABLE: "선택한 번역 모델을 사용할 수 없습니다.",
-  QUOTA_EXCEEDED: "Gemini API 할당량이 소진되었습니다.",
+  QUOTA_EXCEEDED: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
   TRANSLATION_BLOCKED: "안전 정책으로 번역할 수 없습니다.",
   TRANSLATION_FAILED: "번역을 완료할 수 없습니다.",
   OFFLINE: "새 콘텐츠를 열려면 네트워크 연결이 필요합니다.",
@@ -77,7 +77,7 @@ function assertAllowedModel(modelId: string): void {
 function classifyHttpError(status: number): GeminiClientError {
   if (status === 401) return new GeminiClientError("INVALID_API_KEY", false);
   if (status === 403 || status === 404) return new GeminiClientError("MODEL_UNAVAILABLE", false);
-  if (status === 429) return new GeminiClientError("QUOTA_EXCEEDED", true);
+  if (status === 429) return new GeminiClientError("QUOTA_EXCEEDED", false);
   return new GeminiClientError("TRANSLATION_FAILED", status >= 500);
 }
 

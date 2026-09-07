@@ -81,7 +81,7 @@ describe("Gemini client", () => {
     [401, "INVALID_API_KEY", false],
     [403, "MODEL_UNAVAILABLE", false],
     [404, "MODEL_UNAVAILABLE", false],
-    [429, "QUOTA_EXCEEDED", true],
+    [429, "QUOTA_EXCEEDED", false],
     [500, "TRANSLATION_FAILED", true],
     [503, "TRANSLATION_FAILED", true],
     [418, "TRANSLATION_FAILED", false],
@@ -98,6 +98,23 @@ describe("Gemini client", () => {
     expect(toPublicError(error)).toMatchObject({ code });
     expect(JSON.stringify(error)).not.toContain(API_KEY);
     expect((error as Error).message).not.toContain("upstream detail");
+  });
+
+  it("reports Gemini usage exhaustion without retrying", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse({}, 429));
+
+    const error = await validateApiKey({
+      apiKey: API_KEY,
+      modelId,
+      signal: new AbortController().signal,
+      fetchImpl,
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      code: "QUOTA_EXCEEDED",
+      message: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
+      retryable: false,
+    });
   });
 
   it("classifies a safety-blocked response without exposing its raw content", async () => {

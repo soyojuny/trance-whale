@@ -55,6 +55,20 @@ describe("validateTranslationOutput", () => {
     ]);
   });
 
+  it("accepts a requested ID with a non-identifier suffix emitted by Gemini", () => {
+    const rawResponse = JSON.stringify({
+      translations: [
+        { id: "p-1촌", text: "첫 번째 번역" },
+        { id: "p-2", text: "두 번째 번역" },
+      ],
+    });
+
+    expect(validateTranslationOutput(rawResponse, chunk)).toEqual([
+      { id: "p-1", text: "첫 번째 번역" },
+      { id: "p-2", text: "두 번째 번역" },
+    ]);
+  });
+
   it("rejects malformed JSON", () => {
     expectContractFailure('{"translations":', "MALFORMED_JSON");
   });

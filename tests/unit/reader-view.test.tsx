@@ -101,23 +101,27 @@ describe("ReaderView", () => {
     expect(screen.queryByLabelText("p2 번역 대기 중")).not.toBeInTheDocument();
   });
 
-  it("keeps successful text, shows unique safe failure reasons, and exposes retry when eligible", () => {
+  it("keeps successful text and shows that usage exhaustion cannot be retried", () => {
     const onRetryFailed = vi.fn();
     const state = contentState("partial_failure");
     if (state.status !== "partial_failure") throw new Error("partial failure state expected");
     state.errors = [
-      { code: "QUOTA_EXCEEDED", message: "Gemini API 할당량이 소진되었습니다.", retryable: true },
+      {
+        code: "QUOTA_EXCEEDED",
+        message: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
+        retryable: false,
+      },
       { code: "TRANSLATION_BLOCKED", message: "안전 정책으로 번역할 수 없습니다.", retryable: false },
     ];
     render(<ReaderView state={state} settings={settings} onRetryFailed={onRetryFailed} />);
 
     expect(screen.getByText("첫 번째 번역")).toBeInTheDocument();
     expect(screen.getByText("번역하지 못한 문단이 1개 있습니다.")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("Gemini API 할당량이 소진되었습니다.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.");
     expect(screen.getByRole("alert")).toHaveTextContent("안전 정책으로 번역할 수 없습니다.");
     expect(screen.getByTestId("paragraph-p2")).toHaveTextContent("번역 실패");
-    fireEvent.click(screen.getByRole("button", { name: "실패한 문단 다시 번역" }));
-    expect(onRetryFailed).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "실패한 문단 다시 번역" })).not.toBeInTheDocument();
+    expect(onRetryFailed).not.toHaveBeenCalled();
   });
 
   it("does not expose a retry action or raw errors for non-retryable partial failures", () => {

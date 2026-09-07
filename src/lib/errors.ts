@@ -44,7 +44,10 @@ const PUBLIC_ERRORS = {
   EPUB_UNSUPPORTED: { message: "지원하지 않는 EPUB 형식입니다.", retryable: false },
   INVALID_API_KEY: { message: "Gemini API Key를 확인해 주세요.", retryable: false },
   MODEL_UNAVAILABLE: { message: "선택한 번역 모델을 사용할 수 없습니다.", retryable: false },
-  QUOTA_EXCEEDED: { message: "Gemini API 할당량이 소진되었습니다.", retryable: true },
+  QUOTA_EXCEEDED: {
+    message: "Gemini API 사용량이 소진되었습니다. 사용량을 확인한 뒤 다시 시도해 주세요.",
+    retryable: false,
+  },
   TRANSLATION_BLOCKED: { message: "안전 정책으로 번역할 수 없습니다.", retryable: false },
   TRANSLATION_FAILED: { message: "번역을 완료할 수 없습니다.", retryable: true },
   STORAGE_FULL: { message: "브라우저 저장 공간이 부족합니다.", retryable: true },

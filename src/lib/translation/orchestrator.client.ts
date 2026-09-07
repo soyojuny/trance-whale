@@ -51,7 +51,7 @@ function isRetryable(error: unknown): boolean {
   return (
     error instanceof TranslationOutputError ||
     error instanceof TypeError ||
-    (error instanceof GeminiClientError && error.retryable)
+    (error instanceof GeminiClientError && error.code !== "QUOTA_EXCEEDED" && error.retryable)
   );
 }
 

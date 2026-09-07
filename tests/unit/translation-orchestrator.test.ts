@@ -72,7 +72,6 @@ describe("orchestrateTranslation", () => {
   });
 
   it.each([
-    new GeminiClientError("QUOTA_EXCEEDED", true),
     new GeminiClientError("TRANSLATION_FAILED", true),
     new TypeError("network failed"),
     new TranslationOutputError("MISSING_ID"),
@@ -90,6 +89,19 @@ describe("orchestrateTranslation", () => {
     expect(translate).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(2);
     expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([257, 507]);
+    expect(result.status).toBe("failed");
+  });
+
+  it("does not automatically retry Gemini usage exhaustion", async () => {
+    const translate = vi.fn().mockRejectedValue(new GeminiClientError("QUOTA_EXCEEDED", true));
+
+    const result = await orchestrateTranslation(request({ paragraphs: [paragraphs[0]] }), {
+      translate,
+      sleep: vi.fn(),
+      jitter: () => 0,
+    });
+
+    expect(translate).toHaveBeenCalledOnce();
     expect(result.status).toBe("failed");
   });
 
