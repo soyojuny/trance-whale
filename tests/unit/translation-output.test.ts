@@ -41,6 +41,20 @@ describe("validateTranslationOutput", () => {
     ]);
   });
 
+  it("accepts an otherwise matching ID with a trailing colon emitted by Gemini", () => {
+    const rawResponse = JSON.stringify({
+      translations: [
+        { id: "p-1: ", text: "첫 번째 번역" },
+        { id: "p-2", text: "두 번째 번역" },
+      ],
+    });
+
+    expect(validateTranslationOutput(rawResponse, chunk)).toEqual([
+      { id: "p-1", text: "첫 번째 번역" },
+      { id: "p-2", text: "두 번째 번역" },
+    ]);
+  });
+
   it("rejects malformed JSON", () => {
     expectContractFailure('{"translations":', "MALFORMED_JSON");
   });

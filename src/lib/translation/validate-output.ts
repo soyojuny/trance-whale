@@ -26,13 +26,26 @@ export function validateTranslationOutput(
     throw new TranslationOutputError(hasDuplicateId ? "DUPLICATE_ID" : "INVALID_SCHEMA");
   }
 
-  const translations = parsed.data.translations;
   const requestedIds = chunk.paragraphs.map((paragraph) => paragraph.id);
   const requestedIdSet = new Set(requestedIds);
+  const translations = parsed.data.translations.map((paragraph) => {
+    const trimmedId = paragraph.id.trim();
+    const idWithoutTrailingColon = trimmedId.endsWith(":")
+      ? trimmedId.slice(0, -1).trimEnd()
+      : trimmedId;
+    const id = requestedIdSet.has(idWithoutTrailingColon)
+      ? idWithoutTrailingColon
+      : paragraph.id;
+    return { ...paragraph, id };
+  });
   const translatedIds = translations.map((paragraph) => paragraph.id);
 
   if (translatedIds.some((id) => !requestedIdSet.has(id))) {
     throw new TranslationOutputError("UNEXPECTED_ID");
+  }
+
+  if (new Set(translatedIds).size !== translatedIds.length) {
+    throw new TranslationOutputError("DUPLICATE_ID");
   }
 
   const translatedIdSet = new Set(translatedIds);

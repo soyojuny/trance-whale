@@ -18,7 +18,7 @@ export const viewport: Viewport = { themeColor: "#143e3a" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" data-scroll-behavior="smooth">
       <body>{children}<ServiceWorkerRegistration /></body>
     </html>
   );
