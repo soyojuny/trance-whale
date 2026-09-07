@@ -63,7 +63,10 @@ async function mockBoundaries(page: Page) {
     }
     const parsed = JSON.parse(text) as { paragraphs: Array<{ id: string }> };
     const translations = parsed.paragraphs.map(({ id }) => ({ id, text: `${id} 한국어 번역` }));
-    await route.fulfill({ json: { candidates: [{ content: { parts: [{ text: JSON.stringify({ translations }) }] } }] } });
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ translations }) }] } }] })}\n\n`,
+    });
   });
   return {
     geminiRequests,
@@ -88,7 +91,7 @@ function translationRequestIds(requests: readonly string[]): string[][] {
 
 async function saveKeyAndOpen(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "설정 열기" }).click();
+  await page.getByRole("button", { name: /^설정( 열기)?$/ }).click();
   await page.getByLabel("Gemini API Key").fill(API_KEY);
   await page.getByRole("button", { name: "변경사항 저장" }).click();
   await expect(page.getByText("저장됨 · 다음 장부터 적용")).toBeVisible();
@@ -248,6 +251,31 @@ test("reload에서 설정과 번역 cache를 복원하고 360px에서 overflow�
   const targets = await page.locator(".mobile-reader-tools button:visible").evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
   expect(targets).toHaveLength(4);
   expect(targets.every((height) => height >= 44)).toBe(true);
+});
+
+test("모델·프롬프트 변경 후 reload는 저장된 번역을 유지하고 명시적 재번역만 API를 호출한다", async ({ page }) => {
+  const boundaries = await mockBoundaries(page);
+  await saveKeyAndOpen(page);
+  await expect(page.getByText("p-2 한국어 번역")).toBeVisible();
+  const geminiCount = boundaries.geminiRequests.length;
+
+  for (const setting of ["model", "prompt"]) {
+    await page.getByRole("button", { name: "설정", exact: true }).click();
+    if (setting === "model") {
+      await page.getByRole("radio", { name: /고품질 번역/ }).check();
+    } else {
+      await page.locator("#reader-user-prompt").fill("이름과 말투를 유지해 주세요.");
+    }
+    await page.getByRole("button", { name: "변경사항 저장" }).click();
+    await page.reload();
+    await expect(page.getByText("p-2 한국어 번역")).toBeVisible();
+    expect(boundaries.geminiRequests).toHaveLength(geminiCount);
+  }
+
+  await page.getByRole("button", { name: "설정", exact: true }).click();
+  await page.getByRole("button", { name: "현재 장 다시 번역" }).click();
+  await expect.poll(() => boundaries.geminiRequests.length).toBeGreaterThan(geminiCount);
+  expect(boundaries.geminiRequests.at(-1)).toContain("이름과 말투를 유지해 주세요.");
 });
 
 test("리더의 다시 불러오기와 현재 장 다시 번역을 실제 세션에 연결한다", async ({ page }) => {

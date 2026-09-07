@@ -81,7 +81,11 @@ function partialRecord(
 function cacheDouble() {
   const records = new Map<string, StoredTranslationCacheRecord>();
   const cache: TranslationCache = {
-    get: vi.fn(async (key) => records.get(key)),
+    get: vi.fn(async (key, source) => records.get(key) ?? (source && [...records.values()].find(
+      (record) => record.canonicalUrl === source.canonicalUrl
+        && record.contentHash === source.contentHash
+        && record.targetLanguage === source.targetLanguage,
+    ))),
     put: vi.fn(async (input: TranslationCachePutInput) => {
       const metadata = {
         canonicalUrl: input.canonicalUrl,
@@ -161,13 +165,17 @@ describe("cached translation pipeline", () => {
     expect(cache.put).not.toHaveBeenCalled();
   });
 
-  it("restores a partial record first and requests only missing paragraph IDs", async () => {
+  it.each(["", "새 프롬프트"])("restores partial paragraphs with prompt %s and requests only missing IDs", async (userPrompt) => {
     const { cache, records } = cacheDouble();
     const translate = vi.fn(async ({ chunk }: { chunk: { paragraphs: TranslationParagraph[] } }) =>
       translations(chunk.paragraphs),
     );
     const task = await prepareCachedChapterTranslation(
       { chapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+    const changedTask = await prepareCachedChapterTranslation(
+      { chapter, mode: "fast", userPrompt },
       { cache, pipeline: { ...pipelineDependencies, translate } },
     );
     records.set(task.cacheKey, partialRecord(task.cacheKey, {
@@ -180,8 +188,8 @@ describe("cached translation pipeline", () => {
     }));
     const events: TranslationProgress[] = [];
 
-    expect(await task.getCached()).toBeUndefined();
-    const result = await task.execute({
+    expect(await changedTask.getCached()).toBeUndefined();
+    const result = await changedTask.execute({
       apiKey: "test-key",
       onProgress: (progress) => events.push(progress),
     });
@@ -195,7 +203,7 @@ describe("cached translation pipeline", () => {
     expect(translate).toHaveBeenCalledOnce();
     expect(translate.mock.calls[0]?.[0].chunk.paragraphs.map(({ id }) => id)).toEqual(["p-2"]);
     expect(result.progress.translations.map(({ id }) => id)).toEqual(["p-1", "p-2", "p-3"]);
-    expect(records.get(task.cacheKey)).toMatchObject({ kind: "complete" });
+    expect(records.get(changedTask.cacheKey)).toMatchObject({ kind: "complete" });
   });
 
   it("forwards miss progress and stores only a complete, exact result", async () => {
@@ -232,10 +240,9 @@ describe("cached translation pipeline", () => {
   });
 
   it.each([
-    ["content", { chapter: { ...chapter, contentHash: "c".repeat(64) }, mode: "fast" as const, userPrompt: "" }],
     ["model", { chapter, mode: "quality" as const, userPrompt: "" }],
     ["prompt", { chapter, mode: "fast" as const, userPrompt: "다른 지시" }],
-  ])("treats changed %s as a cache miss", async (_name, changed) => {
+  ])("reuses saved translations after changing %s until explicitly retranslated", async (_name, changed) => {
     const { cache, records } = cacheDouble();
     const translate = vi.fn(async ({ chunk }: { chunk: { paragraphs: TranslationParagraph[] } }) =>
       translations(chunk.paragraphs),
@@ -250,10 +257,38 @@ describe("cached translation pipeline", () => {
       pipeline: { ...pipelineDependencies, translate },
     });
 
-    const result = await changedTask.execute({ apiKey: "test-key" });
+    expect(await changedTask.getCached()).toMatchObject({ cache: "hit" });
+    const result = await changedTask.execute();
 
     expect(changedTask.cacheKey).not.toBe(base.cacheKey);
-    expect(result.cache).toBe("miss");
+    expect(result.cache).toBe("hit");
+    expect(translate).not.toHaveBeenCalled();
+    expect(cache.put).not.toHaveBeenCalled();
+
+    const forced = await changedTask.execute({ apiKey: "test-key", forceRetranslate: true });
+    expect(forced.cache).toBe("bypassed");
+    expect(translate).toHaveBeenCalled();
+    expect(records.get(changedTask.cacheKey)).toMatchObject({
+      modelId: TRANSLATION_MODELS[changed.mode].modelId,
+    });
+  });
+
+  it.each([
+    { ...chapter, contentHash: "c".repeat(64) },
+    { ...chapter, canonicalUrl: "https://www.69shuba.com/txt/48273/32028707" },
+  ])("does not reuse translations from a different source", async (changedChapter) => {
+    const { cache, records } = cacheDouble();
+    records.set("a".repeat(64), record("a".repeat(64)));
+    const translate = vi.fn(async ({ chunk }: { chunk: { paragraphs: TranslationParagraph[] } }) =>
+      translations(chunk.paragraphs),
+    );
+    const task = await prepareCachedChapterTranslation(
+      { chapter: changedChapter, mode: "fast", userPrompt: "" },
+      { cache, pipeline: { ...pipelineDependencies, translate } },
+    );
+
+    expect(await task.getCached()).toBeUndefined();
+    expect(await task.execute({ apiKey: "test-key" })).toMatchObject({ cache: "miss" });
     expect(translate).toHaveBeenCalled();
   });
 

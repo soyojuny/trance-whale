@@ -128,7 +128,7 @@ export async function prepareCachedChapterTranslation(
   } as const;
 
   const getCached = async (): Promise<CachedChapterTranslationResult | undefined> => {
-    const cached = await dependencies.cache.get(prepared.cacheKey);
+    const cached = await dependencies.cache.get(prepared.cacheKey, cacheRecord);
     if (!cached || !isCompleteTranslationCacheRecord(cached)) return undefined;
 
     const progress = orderedCompleteProgress(request.chapter, cached.translatedParagraphs);
@@ -148,7 +148,7 @@ export async function prepareCachedChapterTranslation(
     async execute(execution = {}) {
       let initialTranslations: readonly TranslationParagraph[] | undefined;
       if (!execution.forceRetranslate && !execution.retryFailed) {
-        const cached = await dependencies.cache.get(prepared.cacheKey);
+        const cached = await dependencies.cache.get(prepared.cacheKey, cacheRecord);
         if (cached && isCompleteTranslationCacheRecord(cached)) {
           const progress = orderedCompleteProgress(request.chapter, cached.translatedParagraphs);
           if (progress) {

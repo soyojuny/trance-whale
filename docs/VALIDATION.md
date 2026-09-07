@@ -67,6 +67,13 @@
 - `tests/unit/gemini.client.test.ts`는 Gemini 응답 메타데이터와 출력 계약 오류를 기록하면서 API Key·원문·번역문을 제외하는지 검증한다. `tests/unit/translation-orchestrator.test.ts`는 계약 오류의 무재시도 및 네트워크 오류의 재시도 이벤트 순서를 검증한다.
 - 시각 레이아웃과 상호작용은 변경하지 않았다. 실제 Gemini 요청의 발생 원인은 DevTools Console에서 `Preserve log`를 켠 뒤 이벤트의 동일 `runId`·`chunkId`와 `attempt`를 비교해 수동 확인한다.
 
+### 설정 변경 후 번역 재사용 확인 (2026-09-08)
+
+- 변경 범위는 번역 캐시 조회 서비스와 이를 호출하는 파이프라인이다. 현재 설정의 키가 없으면 같은 장·원문·대상 언어의 저장된 번역을 사용하며, 명시적 재번역에는 현재 설정을 적용한다. 화면 컴포넌트·스타일·DB 스키마는 변경하지 않았다.
+- 모델·프롬프트 변경 후 API 미호출, 부분 번역의 성공 문단 보존, 다른 원문의 캐시 거부, 명시적 재번역을 회귀 테스트로 검증했다. 전체 단위·통합 테스트 403개, 타입 검사 및 client/server 경계 검사를 포함한 lint가 통과했다.
+- production 빌드와 추가한 데스크톱 Playwright 회귀 테스트가 통과했다. 모델·프롬프트를 각각 저장하고 reload해도 Gemini 요청 수가 늘지 않으며, 명시적 재번역에는 새 프롬프트가 전달됨을 확인했다. 해당 테스트가 사용하는 홈 설정 선택자와 Gemini 성공 응답 mock을 현재 UI·SSE 형식에 맞췄다.
+- 기존 전체 E2E는 로컬 EPUB 준비 단계의 데스크톱 설정 버튼 선택자 불일치로 중단했다. 360px 기존 사례도 mock 수정 전 실패했으며, 이번 변경에서 전체 E2E 또는 360px 검증 완료를 주장하지 않는다. 빌드 검증 시 샌드박스 포트 제한과 실패가 남은 Turbopack 캐시는 권한을 허용한 실행 및 임시 폴더로의 캐시 이동으로 해결했다.
+
 ## 인수 조건 추적
 
 | AC | 분류 | 자동 테스트 근거 | 수동 확인 또는 한계 |
@@ -80,13 +87,13 @@
 | 7 | 추가 필요 | local locator 기반 이전·다음·목차 reader session integration 및 E2E를 추가한다. | 360px 기기에서 목차 조작을 확인한다. |
 | 8 | 일부 자동 테스트 근거 + 추가 필요 | translation cache hit test가 있다. EPUB 장 reload에서 Gemini 미호출 test를 추가한다. | 없음. |
 | 9 | 추가 필요 | archive 저장, 새로고침 및 offline re-open E2E를 추가한다. | 설치된 PWA에서 수동 확인한다. |
-| 10 | 자동 테스트 근거 | cache-key와 client pipeline integration이 원문·프롬프트·모델 변경 cache 분리를 검증한다. | 없음. |
+| 10 | 자동 테스트 근거 | cache-key는 생성 설정 분리를, cached pipeline integration은 원문 변경 시 재사용 거부와 프롬프트 변경 후 기존 번역 유지를 검증한다. | 없음. |
 | 11 | 자동 테스트 근거 | preferences unit과 E2E reload가 설정 복원을 검증한다. | 지원 브라우저별 localStorage 제한을 점검한다. |
 | 12 | 일부 자동 테스트 근거 + 추가 필요 | local data reset test가 있다. EPUB archive·book metadata deletion assertions를 추가한다. | 실제 브라우저의 삭제 확인 흐름을 점검한다. |
 | 13 | 추가 필요 | quota mock에서 cache만 LRU 정리하고 archive를 보존하는 integration test를 추가한다. | 실제 저장공간 부족 환경에서 확인한다. |
 | 14 | 자동 테스트 근거 + 수동 검증 필요 | URL/DNS/redirect 및 source route test가 있다. | 배포 egress/DNS 재바인딩 방어와 69shuba 보조 경로를 점검한다. |
 | 15 | 일부 자동 테스트 근거 + 추가 필요 | manifest/SW test는 존재한다. EPUB import·offline E2E를 추가한다. | 실제 홈 화면 설치 후 핵심 흐름을 확인한다. |
-| 16 | 자동 테스트 근거 + 수동 검증 필요 | 모델 catalog·cache key unit과 E2E 설정 흐름이 모델 분리를 검증한다. | 두 실제 모델의 접근 가능 여부와 UI 안내를 실제 Key로 확인한다. |
+| 16 | 자동 테스트 근거 + 수동 검증 필요 | 모델 catalog·cache key unit과 cached pipeline integration이 모델 변경 후 번역 재사용 및 명시적 재번역의 모델 적용을 검증한다. | 두 실제 모델의 접근 가능 여부와 UI 안내를 실제 Key로 확인한다. |
 
 ## PRD 성공 지표: 기록 방식과 미검증 항목
 

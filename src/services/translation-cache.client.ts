@@ -59,7 +59,10 @@ export type TranslationCachePutResult =
   | { ok: false; error: PublicError };
 
 export interface TranslationCache {
-  get(cacheKey: string): Promise<StoredTranslationCacheRecord | undefined>;
+  get(
+    cacheKey: string,
+    source?: Pick<TranslationCacheRecord, "canonicalUrl" | "contentHash" | "targetLanguage">,
+  ): Promise<StoredTranslationCacheRecord | undefined>;
   put(input: TranslationCachePutInput): Promise<TranslationCachePutResult>;
   delete(cacheKey: string): Promise<void>;
   clear(): Promise<void>;
@@ -165,10 +168,21 @@ export function createTranslationCache({
   const storeName = READER_DB_SCHEMA.stores.translations.name;
 
   return {
-    async get(cacheKey) {
+    async get(cacheKey, source) {
       const key = cacheKeySchema.parse(cacheKey);
       return database.run(storeName, "readwrite", async (store) => {
-        const value = await store.get<unknown>(key);
+        let value = await store.get<unknown>(key);
+        if (typeof value === "undefined" && source) {
+          // Settings identify how a translation was made, not whether it can be read.
+          value = (await recordsByAccess(store))
+            .filter((record) => record.canonicalUrl === source.canonicalUrl
+              && record.contentHash === source.contentHash
+              && record.targetLanguage === source.targetLanguage)
+            .sort((left, right) =>
+              Number(isCompleteTranslationCacheRecord(right)) - Number(isCompleteTranslationCacheRecord(left))
+              || right.createdAt.localeCompare(left.createdAt))
+            [0];
+        }
         if (typeof value === "undefined") return undefined;
         const record = StoredTranslationCacheRecordSchema.parse(value);
         const refreshed = StoredTranslationCacheRecordSchema.parse({ ...record, accessedAt: now() });

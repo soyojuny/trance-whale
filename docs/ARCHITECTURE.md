@@ -256,6 +256,7 @@ type TranslationCacheRecord = TranslationCacheBase & ({
 ```
 
 캐시 키의 원재료를 `SHA-256`으로 직렬화하여 고정 길이 키를 만든다. 사용자 프롬프트 원문과 API Key 자체는 캐시 키나 레코드에 저장하지 않는다.
+현재 설정의 키가 없으면 정규화 URL·원문 해시·대상 언어가 같은 레코드를 조회한다. 완료 번역을 우선하고 같은 완료 상태에서는 생성 시각이 최신인 레코드를 선택한다. 모델·프롬프트 변경만으로 이미 번역한 문단을 다시 요청하지 않으며, 명시적 재번역만 캐시 조회를 우회하여 현재 설정으로 실행한다. 저장 키와 생성 설정 메타데이터는 유지한다.
 partial 레코드는 검증을 통과한 번역만 debounce하여 저장하고 취소·스트림 종료 시 즉시 flush한다. complete cache hit으로 취급하지 않으며, 재개할 때 `unfinishedParagraphIds`만 요청한다. 실행마다 달라지는 chunk ID는 저장하지 않는다.
 
 ## 7. API 경계
@@ -517,7 +518,7 @@ type PublicErrorCode =
 
 - Route Handler부터 추출기까지의 성공·실패 응답
 - 리다이렉트 목적지 재검증
-- 캐시 hit/miss와 프롬프트·모델 변경에 따른 무효화
+- 캐시 hit/miss, 프롬프트·모델 변경 후 기존 번역 재사용 및 명시적 재번역
 - Gemini 응답의 누락, 중복, `429`, 취소 처리
 - 전체 저장 데이터 삭제
 - EPUB library migration, 저장공간 부족, 오프라인 재열기와 local locator의 서버 API 거부

@@ -11,5 +11,6 @@ describe("local data client boundary", () => {
     vi.stubEnv("PWA_BUILD_ID", "");
 
     await expect(import("../../src/services/local-data.client")).resolves.toBeDefined();
+    await expect(import("../../src/lib/translation/cached-pipeline.client")).resolves.toBeDefined();
   });
 });

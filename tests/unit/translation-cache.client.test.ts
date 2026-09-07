@@ -107,6 +107,37 @@ describe("translation cache", () => {
     expect(result.record.byteSize).toBe(new TextEncoder().encode(JSON.stringify(result.record)).byteLength);
   });
 
+  it("finds an existing translation across settings and refreshes its access time", async () => {
+    const database = new MemoryDatabase();
+    let now = "2026-09-04T01:00:00.000Z";
+    const cache = createTranslationCache({ database, now: () => now });
+    await cache.put(completeInput());
+    now = "2026-09-04T02:00:00.000Z";
+
+    const hit = await cache.get("c".repeat(64), completeInput());
+
+    expect(hit).toMatchObject({ cacheKey: HASH_A, accessedAt: now });
+    expect(database.values.size).toBe(1);
+    expect(await cache.get("c".repeat(64), completeInput({ contentHash: "d".repeat(64) }))).toBeUndefined();
+    expect(await cache.get("c".repeat(64), completeInput({ canonicalUrl: "https://www.69shuba.com/txt/1/3" }))).toBeUndefined();
+  });
+
+  it("prefers a complete translation over partial records from other settings", async () => {
+    const database = new MemoryDatabase();
+    let now = "2026-09-04T01:00:00.000Z";
+    const cache = createTranslationCache({ database, now: () => now });
+    await cache.put(completeInput());
+    now = "2026-09-04T02:00:00.000Z";
+    await cache.put(completeInput({ cacheKey: "b".repeat(64) }));
+    now = "2026-09-04T03:00:00.000Z";
+    await cache.put(partialInput({ cacheKey: "c".repeat(64) }));
+
+    expect(await cache.get("d".repeat(64), completeInput())).toMatchObject({ cacheKey: "b".repeat(64) });
+    await cache.delete(HASH_A);
+    await cache.delete("b".repeat(64));
+    expect(await cache.get("d".repeat(64), completeInput())).toMatchObject({ kind: "partial" });
+  });
+
   it("evicts only the least recently accessed records needed for the configured limit", async () => {
     const database = new MemoryDatabase();
     let now = "2026-09-04T01:00:00.000Z";
