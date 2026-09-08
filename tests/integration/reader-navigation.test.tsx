@@ -106,7 +106,7 @@ describe("reader navigation and position", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
-  it("hides tools while scrolling down, ignores jitter, and shows them scrolling up or at the top", () => {
+  it("hides tools while scrolling down, ignores jitter, and shows them scrolling up or at either end", () => {
     const testRuntime = runtime();
     render(<ReaderNavigation initialUrl={chapter("1").sourceUrl} runtime={testRuntime.value} />);
     testRuntime.publishReader(complete(chapter("1")));
@@ -124,6 +124,8 @@ describe("reader navigation and position", () => {
     expect(toolbar).not.toHaveAttribute("inert");
     scroll(160);
     expect(toolbar).toHaveAttribute("inert");
+    scroll(3000);
+    expect(toolbar).not.toHaveAttribute("inert");
     scroll(0);
     expect(toolbar).not.toHaveAttribute("inert");
     scroll(-20);

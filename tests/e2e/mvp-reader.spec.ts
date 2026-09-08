@@ -399,6 +399,11 @@ for (const width of [360, 1280]) {
       await page.evaluate(() => window.scrollTo({ top: 650, behavior: "instant" }));
       await expect(page.locator(".mobile-reader-tools")).toHaveAttribute("inert", "");
       await expect(page.locator(".mobile-reader-tools")).not.toBeInViewport();
+      await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+      await expect(toolbar).not.toHaveAttribute("inert", "");
+      await expect(toolbar).toBeInViewport();
+      await page.evaluate(() => window.scrollTo({ top: 650, behavior: "instant" }));
+      await expect(page.locator(".mobile-reader-tools")).toHaveAttribute("inert", "");
       await settings.evaluate((button) => (button as HTMLElement).focus());
       await expect(settings).not.toBeFocused();
       await page.screenshot({ path: testInfo.outputPath("reader-hidden-360.png"), style: ".reading-copy { visibility: hidden; }" });

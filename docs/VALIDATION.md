@@ -46,6 +46,12 @@
 - 시각 검증 산출물은 `test-results/`의 `settings-360.png`, `reader-visible-360.png`, `reader-hidden-360.png`, `settings-1280.png`, `reader-desktop.png`다. 본문은 스크린샷 전용 스타일로 숨기고 API Key 입력은 마스킹한다. 실제 외부 API는 호출하지 않았으며 전체 E2E 재검증 범위는 아니다.
 - 검증 환경의 샌드박스 포트 제한과 그 실패가 남은 Turbopack 캐시는 허용된 로컬 서버 실행 및 생성 캐시의 `/tmp` 이동으로 해결했다. production 빌드에는 테스트용 `PWA_BUILD_ID=mobile-reader-tools-e2e`를 지정했다.
 
+### 모바일 리더 최하단 도구막대 확인 (2026-09-09)
+
+- 의도한 변화: 모바일 리더가 문서 최하단에 도달하면, 아래로 스크롤하는 중이더라도 하단 도구막대를 표시한다. 최상단·최하단 판정은 8px 허용 오차를 사용하며 기존 스크롤 방향·`inert` 동작은 유지한다.
+- `tests/integration/reader-navigation.test.tsx`는 최하단 도달 시 도구막대가 활성 상태가 되는 것을 검증했고, `npm run typecheck` 및 client/server boundary 검사를 포함한 `npm run lint`가 통과했다.
+- Playwright 360px 사례에도 최하단 표시 검증을 추가했다. 다만 이 환경에서는 Next.js Turbopack 자식 프로세스의 포트 바인딩이 거부되어 E2E 서버가 시작되지 않았다(`Operation not permitted`). 포트 바인딩이 가능한 환경에서 해당 사례를 다시 실행해야 한다.
+
 ### EPUB UI 연결 확인 (2026-09-05)
 
 - 홈의 기본 입력을 접근성 있는 EPUB 파일 선택으로 전환하고, 웹 URL 입력은 `웹 페이지 가져오기` disclosure 안에 유지했다. 선택 파일명·원문·API Key는 URL과 화면 상태에 표시하지 않는다.

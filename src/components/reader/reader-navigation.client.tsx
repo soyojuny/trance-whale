@@ -224,10 +224,11 @@ export default function ReaderNavigation({ initialUrl, navigate, runtime: suppli
     setMobileToolsVisible(true);
     if (!canonicalUrl || settingsOpen || catalogOpen) return;
     const scrollTop = () => Math.max(0, Math.min(window.scrollY, document.documentElement.scrollHeight - window.innerHeight));
+    const isAtBottom = (top: number) => top >= document.documentElement.scrollHeight - window.innerHeight - TOOLBAR_SCROLL_THRESHOLD;
     let anchor = scrollTop();
     const onScroll = () => {
       const top = scrollTop();
-      if (top <= TOOLBAR_SCROLL_THRESHOLD) {
+      if (top <= TOOLBAR_SCROLL_THRESHOLD || isAtBottom(top)) {
         setMobileToolsVisible(true);
         anchor = top;
       } else if (Math.abs(top - anchor) >= TOOLBAR_SCROLL_THRESHOLD) {
